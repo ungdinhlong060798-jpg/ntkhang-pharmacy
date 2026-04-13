@@ -144,6 +144,10 @@
       const [selectedStaff, setSelectedStaff] = useState(null);
       const [showAddStaff, setShowAddStaff] = useState(false);
       const [newStaff, setNewStaff] = useState({name:'', pin:'', role:'staff'});
+      const [staffList, setStaffList] = useState([]);
+      const [staffError, setStaffError] = useState('');
+      const [editingStaff, setEditingStaff] = useState(null);
+      const [editPin, setEditPin] = useState('');
       const chartRef1 = useRef(); const chartRef2 = useRef();
       const chart1 = useRef(); const chart2 = useRef();
 
@@ -179,6 +183,36 @@
         setCart([]); setView('pos');
       };
 
+      // ── Staff management handlers ──
+      const saveNewStaff = async () => {
+        setStaffError('');
+        if (!newStaff.name.trim()) return setStaffError('Vui lòng nhập tên.');
+        if (!/^\d{4}$/.test(newStaff.pin)) return setStaffError('PIN phải đúng 4 chữ số.');
+        if (staffList.find(s => s.name.toLowerCase() === newStaff.name.trim().toLowerCase())) return setStaffError('Tên nhân viên đã tồn tại!');
+        try {
+          await db.collection('staff').doc(newStaff.name.trim()).set({ name: newStaff.name.trim(), pin: newStaff.pin, role: newStaff.role });
+          setNewStaff({name:'', pin:'', role:'staff'});
+          setShowAddStaff(false);
+          showToast('✅ Đã thêm nhân viên!');
+        } catch(e) { setStaffError('Lỗi: ' + e.message); }
+      };
+      const deleteStaff = async (name) => {
+        if (name === currentUser?.name) return showToast('❌ Không thể xoá tài khoản đang đăng nhập!');
+        if (!window.confirm('Xoá nhân viên ' + name + '?')) return;
+        try {
+          await db.collection('staff').doc(name).delete();
+          showToast('🗑 Đã xoá ' + name);
+        } catch(e) { showToast('Lỗi: ' + e.message); }
+      };
+      const saveEditPin = async () => {
+        if (!/^\d{4}$/.test(editPin)) return showToast('❌ PIN phải đúng 4 chữ số!');
+        try {
+          await db.collection('staff').doc(editingStaff.name).update({ pin: editPin });
+          setEditingStaff(null); setEditPin('');
+          showToast('✅ Đã đổi PIN cho ' + editingStaff.name);
+        } catch(e) { showToast('Lỗi: ' + e.message); }
+      };
+
       // ── Load products from Firestore (real-time listener) ──
       useEffect(() => {
         const unsub = db.collection('products').orderBy('no').onSnapshot(snap => {
@@ -201,6 +235,21 @@
       useEffect(() => {
         const unsub = db.collection('orders').orderBy('datetime','desc').onSnapshot(snap => {
           setOrders(snap.docs.map(d => d.data()));
+        }, err => console.error(err));
+        return () => unsub();
+      }, []);
+
+      // ── Load staff from Firestore ──
+      useEffect(() => {
+        const unsub = db.collection('staff').onSnapshot(snap => {
+          if (snap.empty) {
+            // Seed default staff on first load
+            const batch = db.batch();
+            STAFF_LIST.forEach(s => batch.set(db.collection('staff').doc(s.name), s));
+            batch.commit();
+          } else {
+            setStaffList(snap.docs.map(d => d.data()));
+          }
         }, err => console.error(err));
         return () => unsub();
       }, []);
@@ -319,7 +368,7 @@
 
       // ── LOGIN SCREEN ──
       if (!currentUser) {
-        const allStaff = [...STAFF_LIST];
+        const allStaff = staffList.length > 0 ? staffList : STAFF_LIST;
         return (
           <div style={{minHeight:'100vh',background:'linear-gradient(135deg,#d1fae5,#ccfbf1,#cffafe)',display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem'}}>
             <div style={{width:'100%',maxWidth:'22rem'}}>
@@ -410,8 +459,8 @@
           {/* Desktop Nav */}
           <div style={{maxWidth:'80rem',margin:'0.75rem auto',padding:'0 0.75rem'}} className="desktop-only">
             <div className="glass" style={{borderRadius:'1rem',padding:'0.4rem',display:'flex',gap:'0.4rem',marginBottom:'0.75rem'}}>
-              {[['pos','🛒 POS'],['products','📦 Sản phẩm'],['orders','📋 Đơn hàng'],['dashboard','📊 Dashboard']].filter(([v]) => {
-                if ((v==='dashboard') && currentUser?.role !== 'manager') return false;
+              {[['pos','🛒 POS'],['products','📦 Sản phẩm'],['orders','📋 Đơn hàng'],['dashboard','📊 Dashboard'],['staff','👥 Nhân viên']].filter(([v]) => {
+                if ((v==='dashboard'||v==='staff') && currentUser?.role !== 'manager') return false;
                 return true;
               }).map(([v,label]) => (
                 <button key={v} onClick={() => setView(v)} className="nav-btn"
@@ -651,10 +700,44 @@
             )}
           </div>
 
+          {/* Staff Management View */}
+          {view === 'staff' && currentUser?.role === 'manager' && (
+            <div>
+              <div className="glass" style={{borderRadius:'1rem',padding:'1rem',marginBottom:'0.75rem'}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                  <h2 style={{margin:0,fontSize:'1rem'}}>👥 Quản lý nhân viên ({staffList.length})</h2>
+                  <button onClick={()=>{setStaffError('');setShowAddStaff(true);}} className="btn" style={{padding:'0.5rem 0.9rem',fontSize:'0.8rem',background:'linear-gradient(135deg,#3b82f6,#6366f1)'}}>+ Thêm NV</button>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:'0.6rem'}}>
+                  {staffList.map(s => (
+                    <div key={s.name} style={{background:'white',borderRadius:'0.75rem',padding:'0.75rem 1rem',display:'flex',alignItems:'center',gap:'0.75rem',boxShadow:'0 2px 4px rgba(0,0,0,0.06)'}}>
+                      <div style={{width:'2.5rem',height:'2.5rem',borderRadius:'50%',background: s.role==='manager' ? 'linear-gradient(135deg,#f59e0b,#d97706)' : 'linear-gradient(135deg,#10b981,#059669)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'1.2rem',flexShrink:0}}>
+                        {s.role==='manager' ? '👑' : '👤'}
+                      </div>
+                      <div style={{flex:1}}>
+                        <p style={{margin:0,fontWeight:'700',fontSize:'0.95rem'}}>{s.name}</p>
+                        <p style={{margin:0,fontSize:'0.75rem',color:'#6b7280'}}>
+                          {s.role==='manager' ? 'Quản lý' : 'Nhân viên'} • PIN: {'●'.repeat(4)}
+                          {s.name === currentUser?.name && <span style={{marginLeft:'6px',background:'#d1fae5',color:'#047857',fontSize:'0.65rem',padding:'1px 6px',borderRadius:'999px',fontWeight:'700'}}>Bạn</span>}
+                        </p>
+                      </div>
+                      <div style={{display:'flex',gap:'0.4rem'}}>
+                        <button onClick={()=>{setEditingStaff(s);setEditPin('');}} style={{background:'#eff6ff',border:'1px solid #bfdbfe',color:'#2563eb',borderRadius:'0.5rem',padding:'0.35rem 0.6rem',cursor:'pointer',fontSize:'0.75rem',fontWeight:'600'}}>✏️ PIN</button>
+                        {s.name !== currentUser?.name && (
+                          <button onClick={()=>deleteStaff(s.name)} style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#ef4444',borderRadius:'0.5rem',padding:'0.35rem 0.6rem',cursor:'pointer',fontSize:'0.75rem',fontWeight:'600'}}>🗑</button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Mobile Bottom Nav */}
           <div style={{display: isMobile ? 'flex' : 'none', position:'fixed', bottom:0, left:0, right:0, background:'rgba(255,255,255,0.95)', backdropFilter:'blur(12px)', borderTop:'1px solid #a7f3d0', padding:'0.5rem', gap:'0.25rem', zIndex:50}}>
-            {[['pos','🛒','POS'],['products','📦','Kho'],['orders','📋','Đơn'],['dashboard','📊','Thống kê']].filter(([v]) => {
-              if (v==='dashboard' && currentUser?.role !== 'manager') return false;
+            {[['pos','🛒','POS'],['products','📦','Kho'],['orders','📋','Đơn'],['dashboard','📊','Thống kê'],['staff','👥','NV']].filter(([v]) => {
+              if ((v==='dashboard'||v==='staff') && currentUser?.role !== 'manager') return false;
               return true;
             }).map(([v,icon,label]) => (
               <button key={v} onClick={()=>setView(v)} className="nav-btn"
@@ -707,6 +790,66 @@
                 <div style={{display:'flex',gap:'0.5rem'}}>
                   <button onClick={()=>printReceipt(lastOrder)} className="btn" style={{flex:1,fontSize:'0.9rem'}}>🖨 In hoá đơn</button>
                   <button onClick={()=>setShowReceipt(false)} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'2px solid #e5e7eb',background:'white',cursor:'pointer',fontWeight:'600',color:'#6b7280',fontSize:'0.9rem'}}>Đóng</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add Staff Modal */}
+          {showAddStaff && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem',zIndex:200}}>
+              <div className="glass" style={{borderRadius:'1rem',padding:'1.5rem',maxWidth:'22rem',width:'100%'}}>
+                <h2 style={{margin:'0 0 1rem',fontSize:'1rem'}}>➕ Thêm nhân viên mới</h2>
+                <div style={{marginBottom:'0.6rem'}}>
+                  <label style={{display:'block',fontWeight:'600',fontSize:'0.8rem',marginBottom:'0.2rem'}}>Tên nhân viên *</label>
+                  <input type="text" placeholder="VD: Sương" value={newStaff.name} onChange={e=>setNewStaff({...newStaff,name:e.target.value})} />
+                </div>
+                <div style={{marginBottom:'0.6rem'}}>
+                  <label style={{display:'block',fontWeight:'600',fontSize:'0.8rem',marginBottom:'0.2rem'}}>PIN (4 chữ số) *</label>
+                  <input type="number" placeholder="VD: 1234" value={newStaff.pin} onChange={e=>setNewStaff({...newStaff,pin:e.target.value.slice(0,4)})} />
+                </div>
+                <div style={{marginBottom:'0.75rem'}}>
+                  <label style={{display:'block',fontWeight:'600',fontSize:'0.8rem',marginBottom:'0.2rem'}}>Vai trò *</label>
+                  <select value={newStaff.role} onChange={e=>setNewStaff({...newStaff,role:e.target.value})}>
+                    <option value="staff">👤 Nhân viên</option>
+                    <option value="manager">👑 Quản lý</option>
+                  </select>
+                </div>
+                {staffError && <p style={{color:'#dc2626',fontWeight:'600',margin:'0.4rem 0',fontSize:'0.8rem'}}>⚠️ {staffError}</p>}
+                <div style={{display:'flex',gap:'0.5rem',marginTop:'1rem'}}>
+                  <button onClick={saveNewStaff} className="btn" style={{flex:1,fontSize:'0.9rem'}}>💾 Lưu</button>
+                  <button onClick={()=>{setShowAddStaff(false);setStaffError('');}} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'2px solid #e5e7eb',background:'white',cursor:'pointer',fontWeight:'600',color:'#6b7280',fontSize:'0.9rem'}}>Huỷ</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Edit PIN Modal */}
+          {editingStaff && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem',zIndex:200}}>
+              <div className="glass" style={{borderRadius:'1rem',padding:'1.5rem',maxWidth:'22rem',width:'100%'}}>
+                <h2 style={{margin:'0 0 0.75rem',fontSize:'1rem'}}>✏️ Đổi PIN — {editingStaff.name}</h2>
+                <p style={{margin:'0 0 0.75rem',fontSize:'0.85rem',color:'#6b7280'}}>Nhập PIN mới (4 chữ số)</p>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'0.5rem',marginBottom:'1rem'}}>
+                  {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((d,i) => (
+                    <button key={i} onClick={() => {
+                      if (d==='') return;
+                      if (d==='⌫') { setEditPin(p=>p.slice(0,-1)); return; }
+                      if (editPin.length < 4) setEditPin(p=>p+d);
+                    }}
+                      style={{padding:'0.9rem',borderRadius:'0.75rem',border:'2px solid #e5e7eb',background:d===''?'transparent':'white',cursor:d===''?'default':'pointer',fontSize:'1.2rem',fontWeight:'700',color:'#374151'}}>
+                      {d}
+                    </button>
+                  ))}
+                </div>
+                <div style={{display:'flex',justifyContent:'center',gap:'0.75rem',marginBottom:'1rem'}}>
+                  {[0,1,2,3].map(i=>(
+                    <div key={i} style={{width:'0.9rem',height:'0.9rem',borderRadius:'50%',background:editPin.length>i?'#10b981':'#e5e7eb',border:'2px solid',borderColor:editPin.length>i?'#10b981':'#d1d5db'}}></div>
+                  ))}
+                </div>
+                <div style={{display:'flex',gap:'0.5rem'}}>
+                  <button onClick={saveEditPin} disabled={editPin.length!==4} className="btn" style={{flex:1,fontSize:'0.9rem'}}>💾 Lưu PIN mới</button>
+                  <button onClick={()=>{setEditingStaff(null);setEditPin('');}} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'2px solid #e5e7eb',background:'white',cursor:'pointer',fontWeight:'600',color:'#6b7280',fontSize:'0.9rem'}}>Huỷ</button>
                 </div>
               </div>
             </div>
