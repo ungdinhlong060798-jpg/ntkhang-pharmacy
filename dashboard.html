@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
   <title>NTK.Hang Pharmacy - Dashboard Realtime</title>
 
   <!-- Chart.js -->
@@ -33,11 +33,9 @@
       appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
     };
     
-    // Khởi tạo Firebase
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     
-    // ========== HÀM TIỆN ÍCH ==========
     function formatMoney(amount) {
       if (!amount && amount !== 0) return '0 ₫';
       return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
@@ -60,13 +58,9 @@
       return d;
     }
     
-    // Biến toàn cục lưu dữ liệu hiện tại
     let currentChart = null;
-    let currentLowStock = [];
-    let currentTopProducts = [];
-    let currentTopStaff = [];
     
-    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
+    // ========== REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
       const today = new Date();
       const startToday = getStartOfDay(today);
@@ -78,32 +72,18 @@
         where('createdAt', '<=', Timestamp.fromDate(endToday))
       );
       
-      // Lắng nghe thay đổi realtime
       onSnapshot(q, (snapshot) => {
         let totalRevenue = 0;
         snapshot.forEach(doc => {
           totalRevenue += doc.data().total || 0;
         });
         
-        // Cập nhật giao diện ngay lập tức
         document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
         document.getElementById('todayOrders').innerHTML = snapshot.size.toLocaleString('vi-VN');
-        
-        // Thêm hiệu ứng flash khi có đơn mới
-        const revenueElement = document.getElementById('todayRevenue');
-        revenueElement.style.transition = '0.2s';
-        revenueElement.style.transform = 'scale(1.05)';
-        setTimeout(() => {
-          revenueElement.style.transform = 'scale(1)';
-        }, 300);
-        
-        console.log(`📊 Đã cập nhật: ${snapshot.size} đơn, ${formatMoney(totalRevenue)}`);
-      }, (error) => {
-        console.error('Lỗi realtime orders:', error);
       });
     }
     
-    // ========== 2. REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
+    // ========== REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
     function listenTopProducts() {
       const productsRef = collection(db, 'products');
       const q = query(productsRef, orderBy('sold', 'desc'), limit(5));
@@ -118,8 +98,6 @@
           });
         });
         
-        currentTopProducts = products;
-        
         if (products.length > 0) {
           document.getElementById('topProducts').innerHTML = products.map((p, idx) => `
             <li>
@@ -133,14 +111,13 @@
       });
     }
     
-    // ========== 3. REALTIME: TOP NHÂN VIÊN ==========
+    // ========== REALTIME: TOP NHÂN VIÊN ==========
     function listenTopStaff() {
-      // Thử collection 'staff' trước
-      let staffRef = collection(db, 'staff');
-      let q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
+      const staffRef = collection(db, 'staff');
+      const q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
       
       onSnapshot(q, (snapshot) => {
-        let staff = [];
+        const staff = [];
         snapshot.forEach(doc => {
           const data = doc.data();
           staff.push({
@@ -150,7 +127,6 @@
         });
         
         if (staff.length > 0) {
-          currentTopStaff = staff;
           document.getElementById('topStaff').innerHTML = staff.map((s, idx) => `
             <li>
               <span class="staff-name">${idx + 1}. ${s.name}</span>
@@ -158,36 +134,12 @@
             </li>
           `).join('');
         } else {
-          // Thử collection 'users'
-          const usersRef = collection(db, 'users');
-          const q2 = query(usersRef, orderBy('totalSales', 'desc'), limit(5));
-          onSnapshot(q2, (snapshot2) => {
-            const staff2 = [];
-            snapshot2.forEach(doc => {
-              const data = doc.data();
-              staff2.push({
-                name: data.name || data.fullName || data.displayName || data.email,
-                total: data.totalSales || data.revenue || 0
-              });
-            });
-            
-            if (staff2.length > 0) {
-              currentTopStaff = staff2;
-              document.getElementById('topStaff').innerHTML = staff2.map((s, idx) => `
-                <li>
-                  <span class="staff-name">${idx + 1}. ${s.name}</span>
-                  <span class="staff-amount">${formatMoney(s.total)}</span>
-                </li>
-              `).join('');
-            } else {
-              document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-            }
-          });
+          document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
         }
       });
     }
     
-    // ========== 4. REALTIME: THUỐC SẮP HẾT ==========
+    // ========== REALTIME: THUỐC SẮP HẾT ==========
     function listenLowStock() {
       const productsRef = collection(db, 'products');
       const q = query(productsRef, where('stock', '<', 10));
@@ -204,7 +156,6 @@
         });
         
         products.sort((a, b) => a.stock - b.stock);
-        currentLowStock = products;
         
         if (products.length > 0) {
           document.getElementById('lowStockTable').innerHTML = `
@@ -235,48 +186,40 @@
       });
     }
     
-    // ========== 5. REALTIME: DOANH THU 7 NGÀY ==========
-    // Cập nhật biểu đồ mỗi khi có đơn hàng mới
-    function listenRevenue7Days() {
-      const ordersRef = collection(db, 'orders');
+    // ========== DOANH THU 7 NGÀY ==========
+    async function loadRevenue7Days() {
+      const dates = [];
+      const revenues = [];
       
-      // Lắng nghe tất cả đơn hàng (có thể tối ưu bằng cách chỉ lấy 7 ngày)
-      onSnapshot(ordersRef, async () => {
-        // Tính lại doanh thu 7 ngày
-        const dates = [];
-        const revenues = [];
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const startDate = getStartOfDay(date);
+        const endDate = getEndOfDay(date);
         
-        for (let i = 6; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(date.getDate() - i);
-          const startDate = getStartOfDay(date);
-          const endDate = getEndOfDay(date);
+        dates.push(formatDate(date));
+        
+        try {
+          const ordersRef = collection(db, 'orders');
+          const q = query(ordersRef,
+            where('createdAt', '>=', Timestamp.fromDate(startDate)),
+            where('createdAt', '<=', Timestamp.fromDate(endDate))
+          );
           
-          dates.push(formatDate(date));
-          
-          try {
-            const q = query(ordersRef,
-              where('createdAt', '>=', Timestamp.fromDate(startDate)),
-              where('createdAt', '<=', Timestamp.fromDate(endDate))
-            );
-            
-            const snapshot = await getDocs(q);
-            let dailyTotal = 0;
-            snapshot.forEach(doc => {
-              dailyTotal += doc.data().total || 0;
-            });
-            revenues.push(dailyTotal);
-          } catch (error) {
-            revenues.push(0);
-          }
+          const snapshot = await getDocs(q);
+          let dailyTotal = 0;
+          snapshot.forEach(doc => {
+            dailyTotal += doc.data().total || 0;
+          });
+          revenues.push(dailyTotal);
+        } catch (error) {
+          revenues.push(0);
         }
-        
-        // Vẽ lại biểu đồ
-        drawChart(dates, revenues);
-      });
+      }
+      
+      drawChart(dates, revenues);
     }
     
-    // ========== VẼ BIỂU ĐỒ ==========
     function drawChart(labels, values) {
       const ctx = document.getElementById('revenueChart').getContext('2d');
       if (currentChart) currentChart.destroy();
@@ -289,8 +232,9 @@
             label: 'Doanh thu',
             data: values,
             backgroundColor: '#2a9d6e',
-            borderRadius: 8,
-            barPercentage: 0.65
+            borderRadius: 6,
+            barPercentage: 0.7,
+            categoryPercentage: 0.8
           }]
         },
         options: {
@@ -311,37 +255,38 @@
               beginAtZero: true,
               ticks: {
                 callback: function(value) {
-                  return value.toLocaleString('vi-VN') + ' ₫';
-                }
+                  return value.toLocaleString('vi-VN');
+                },
+                font: { size: 11 }
               }
+            },
+            x: {
+              ticks: { font: { size: 11 } }
             }
           }
         }
       });
     }
     
-    // ========== HIỂN THỊ THỜI GIAN CẬP NHẬT ==========
     function updateTimestamp() {
       const now = new Date();
-      document.getElementById('updateTime').innerHTML = `🟢 Realtime đang hoạt động | Cập nhật: ${now.toLocaleString('vi-VN')}`;
+      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
     }
     
-    // Cập nhật timestamp mỗi giây
+    // Khởi động
+    listenTodayStats();
+    listenTopProducts();
+    listenTopStaff();
+    listenLowStock();
+    loadRevenue7Days();
+    updateTimestamp();
     setInterval(updateTimestamp, 1000);
     
-    // ========== KHỞI ĐỘNG TẤT CẢ REALTIME LISTENERS ==========
-    console.log('🚀 Khởi động Dashboard Realtime...');
-    
-    listenTodayStats();      // Lắng nghe đơn hàng hôm nay
-    listenTopProducts();     // Lắng nghe top sản phẩm
-    listenTopStaff();        // Lắng nghe top nhân viên
-    listenLowStock();        // Lắng nghe hàng sắp hết
-    listenRevenue7Days();    // Lắng nghe doanh thu 7 ngày
-    
-    updateTimestamp();
-    
-    // Hiển thị trạng thái kết nối
-    console.log('✅ Dashboard Realtime đã sẵn sàng!');
+    // Refresh biểu đồ mỗi khi có đơn hàng mới
+    const ordersRef = collection(db, 'orders');
+    onSnapshot(ordersRef, () => {
+      loadRevenue7Days();
+    });
   </script>
 
   <style>
@@ -351,46 +296,54 @@
       box-sizing: border-box;
     }
 
-    html, body {
+    /* QUAN TRỌNG: Đảm bảo không bị cắt ở bất kỳ zoom nào */
+    html {
       width: 100%;
       height: 100%;
-      overflow-x: hidden;
-      background: #f0f7f3;
+      overflow-x: auto;
+      overflow-y: auto;
     }
 
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
-      padding: 20px;
+      background: #f0f7f3;
       color: #1a3a2e;
+      width: 100%;
       min-height: 100vh;
+      padding: 16px;
+      /* Cho phép cuộn ngang nếu cần */
+      overflow-x: auto;
     }
 
+    /* Container chính - responsive hoàn toàn */
     .dashboard {
       width: 100%;
-      height: 100%;
-      max-width: 1600px;
+      max-width: 1400px;
+      min-width: 320px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
 
+    /* Header */
     h1 {
       text-align: center;
-      margin-bottom: 0;
+      font-size: clamp(18px, 5vw, 26px);
       color: #1a6d4c;
-      font-size: 28px;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
     }
 
     .realtime-badge {
       background: #2a9d6e;
       color: white;
-      font-size: 12px;
-      padding: 4px 12px;
+      font-size: 11px;
+      padding: 3px 10px;
       border-radius: 20px;
       animation: pulse 2s infinite;
     }
@@ -401,95 +354,92 @@
       100% { opacity: 0.6; }
     }
 
-    /* 2 ô trên cùng */
+    /* 2 ô trên cùng - co giãn linh hoạt */
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
+      gap: 16px;
     }
 
     .stat-card {
       background: white;
-      border-radius: 24px;
-      padding: 28px 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      padding: 16px 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
       text-align: center;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .stat-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 8px 30px rgba(0,0,0,0.12);
     }
 
     .stat-card h3 {
-      font-size: 18px;
+      font-size: clamp(12px, 3vw, 16px);
       color: #5a6e66;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
       font-weight: 500;
     }
 
     .stat-number {
-      font-size: 52px;
+      font-size: clamp(24px, 6vw, 42px);
       font-weight: bold;
       color: #1a6d4c;
-      transition: transform 0.2s;
+      word-break: break-word;
     }
 
-    /* Giữa: biểu đồ + 2 box phải */
+    /* Hàng giữa - responsive quan trọng */
     .middle-row {
       display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 20px;
-      min-height: 400px;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 16px;
     }
 
     .chart-card {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
       display: flex;
       flex-direction: column;
+      min-width: 0; /* Quan trọng: tràn flex */
     }
 
     .chart-card h3 {
-      font-size: 18px;
-      margin-bottom: 16px;
+      font-size: clamp(12px, 3vw, 16px);
+      margin-bottom: 10px;
       color: #1a6d4c;
-      padding-left: 8px;
+      padding-left: 6px;
     }
 
     .chart-container {
-      flex: 1;
-      min-height: 300px;
+      width: 100%;
+      height: auto;
+      min-height: 220px;
+      position: relative;
     }
 
     canvas {
-      max-height: 100%;
-      width: 100% !important;
+      max-width: 100%;
+      height: auto !important;
+      max-height: 260px;
     }
 
     .right-stack {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 16px;
     }
 
     .info-card {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
       flex: 1;
     }
 
     .info-card h3 {
-      font-size: 18px;
-      margin-bottom: 16px;
+      font-size: clamp(12px, 3vw, 16px);
+      margin-bottom: 10px;
       color: #1a6d4c;
-      border-left: 4px solid #1a6d4c;
-      padding-left: 12px;
+      border-left: 3px solid #1a6d4c;
+      padding-left: 10px;
     }
 
     .top-list {
@@ -500,8 +450,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 12px 0;
+      padding: 8px 0;
       border-bottom: 1px solid #e8f0ec;
+      font-size: clamp(11px, 2.5vw, 14px);
     }
 
     .top-list li:last-child {
@@ -510,57 +461,52 @@
 
     .staff-name {
       font-weight: 500;
-      font-size: 15px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 65%;
     }
 
     .staff-amount {
       color: #1a6d4c;
       font-weight: bold;
-      font-size: 15px;
+      white-space: nowrap;
     }
 
-    /* Bảng dưới cùng */
+    /* Bảng dưới cùng - cuộn ngang nếu cần */
     .bottom-row {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      max-height: 350px;
-      overflow-y: auto;
+      border-radius: 20px;
+      padding: 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      overflow-x: auto;
     }
 
     .bottom-row h3 {
-      font-size: 18px;
-      margin-bottom: 16px;
+      font-size: clamp(12px, 3vw, 16px);
+      margin-bottom: 12px;
       color: #1a6d4c;
-      border-left: 4px solid #1a6d4c;
-      padding-left: 12px;
-      position: sticky;
-      top: 0;
-      background: white;
-      padding-top: 4px;
-      padding-bottom: 4px;
-      z-index: 10;
+      border-left: 3px solid #1a6d4c;
+      padding-left: 10px;
     }
 
     table {
       width: 100%;
+      min-width: 400px;
       border-collapse: collapse;
     }
 
     th, td {
-      padding: 12px 10px;
+      padding: 8px 6px;
       text-align: left;
       border-bottom: 1px solid #e8f0ec;
-      font-size: 14px;
+      font-size: clamp(11px, 2.5vw, 13px);
     }
 
     th {
       background: #f0f7f3;
       color: #1a6d4c;
       font-weight: 600;
-      position: sticky;
-      top: 52px;
     }
 
     .stock-low {
@@ -575,34 +521,70 @@
 
     .update-time {
       text-align: center;
-      margin-top: 10px;
+      margin-top: 8px;
       color: #8aa99e;
-      font-size: 13px;
-      padding: 8px;
-      background: rgba(255,255,255,0.5);
-      border-radius: 20px;
+      font-size: 11px;
     }
 
-    /* Responsive mobile */
+    /* ========== RESPONSIVE CHO MỌI KÍCH THƯỚC ========== */
+    
+    /* Màn hình nhỏ (dưới 768px) - chuyển sang dọc */
     @media (max-width: 768px) {
       body {
         padding: 12px;
-      }
-      .stat-number {
-        font-size: 36px;
       }
       .middle-row {
         grid-template-columns: 1fr;
         gap: 12px;
       }
       .chart-container {
-        min-height: 250px;
-      }
-      .bottom-row {
-        max-height: 300px;
+        min-height: 200px;
       }
       .stat-card {
-        padding: 16px;
+        padding: 12px;
+      }
+    }
+    
+    /* Màn hình rất nhỏ (dưới 480px) */
+    @media (max-width: 480px) {
+      .top-row {
+        gap: 10px;
+      }
+      .staff-name, .staff-amount {
+        font-size: 11px;
+      }
+    }
+    
+    /* Màn hình lớn (trên 1400px) - giữ tỷ lệ đẹp */
+    @media (min-width: 1400px) {
+      .dashboard {
+        max-width: 1600px;
+      }
+      .stat-number {
+        font-size: 48px;
+      }
+      .chart-container {
+        min-height: 300px;
+      }
+    }
+    
+    /* Màn hình rất rộng */
+    @media (min-width: 1920px) {
+      .dashboard {
+        max-width: 1800px;
+      }
+      body {
+        padding: 24px;
+      }
+      .stat-number {
+        font-size: 56px;
+      }
+      .chart-container {
+        min-height: 350px;
+      }
+      th, td {
+        padding: 12px 10px;
+        font-size: 14px;
       }
     }
   </style>
@@ -614,19 +596,17 @@
     <span class="realtime-badge">🔴 LIVE</span>
   </h1>
 
-  <!-- Hàng trên -->
   <div class="top-row">
     <div class="stat-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
-      <div class="stat-number" id="todayRevenue">-- ₫</div>
+      <div class="stat-number" id="todayRevenue">0 ₫</div>
     </div>
     <div class="stat-card">
       <h3>📦 TỔNG SỐ ĐƠN HÔM NAY</h3>
-      <div class="stat-number" id="todayOrders">--</div>
+      <div class="stat-number" id="todayOrders">0</div>
     </div>
   </div>
 
-  <!-- Hàng giữa -->
   <div class="middle-row">
     <div class="chart-card">
       <h3>📊 Biểu đồ doanh thu 7 ngày gần nhất</h3>
@@ -639,19 +619,18 @@
       <div class="info-card">
         <h3>🏆 Top 5 thuốc bán chạy</h3>
         <ul class="top-list" id="topProducts">
-          <li>Đang tải dữ liệu...</li>
+          <li>Đang tải...</li>
         </ul>
       </div>
       <div class="info-card">
         <h3>👩‍⚕️ Top nhân viên bán nhiều nhất</h3>
         <ul class="top-list" id="topStaff">
-          <li>Đang tải dữ liệu...</li>
+          <li>Đang tải...</li>
         </ul>
       </div>
     </div>
   </div>
 
-  <!-- Hàng dưới -->
   <div class="bottom-row">
     <h3>⚠️ Thuốc sắp hết hàng (tồn kho &lt; 10)</h3>
     <table id="lowStockTable">
@@ -659,7 +638,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải dữ liệu...</td></tr>
+        <tr><td colspan="4">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
