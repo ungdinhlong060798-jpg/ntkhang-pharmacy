@@ -5,10 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
   <title>NTK.Hang Pharmacy - Dashboard Realtime</title>
 
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
-  <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
     import { 
@@ -19,11 +17,9 @@
       getDocs, 
       orderBy, 
       limit,
-      onSnapshot,
-      Timestamp 
+      onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
     
-    // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
       apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
       authDomain: "ntkhang-pharmacy.firebaseapp.com",
@@ -36,70 +32,90 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
     
+    // ========== HÀM TIỆN ÍCH ==========
     function formatMoney(amount) {
       if (!amount && amount !== 0) return '0 ₫';
       return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
     }
     
-    function formatDate(date) {
-      const d = new Date(date);
-      return `${d.getDate().toString().padStart(2,'0')}-${(d.getMonth()+1).toString().padStart(2,'0')}`;
+    // Lấy ngày từ string datetime "2026-04-11T15:14:46.353Z"
+    function getDateFromDatetime(datetimeStr) {
+      if (!datetimeStr) return null;
+      return datetimeStr.split('T')[0]; // "2026-04-11"
     }
     
-    function getStartOfDay(date) {
-      const d = new Date(date);
-      d.setHours(0, 0, 0, 0);
-      return d;
+    function isToday(dateStr) {
+      if (!dateStr) return false;
+      const today = new Date().toISOString().split('T')[0];
+      return dateStr === today;
     }
     
-    function getEndOfDay(date) {
-      const d = new Date(date);
-      d.setHours(23, 59, 59, 999);
-      return d;
+    function getStartOfDay(dateStr) {
+      return dateStr;
+    }
+    
+    // Lấy doanh thu từ đơn hàng (chỉ tính đơn có status không phải cancelled)
+    function getOrderTotal(order) {
+      if (order.status === 'cancelled') return 0;
+      return order.total || 0;
     }
     
     let currentChart = null;
     
     // ========== REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
-      const today = new Date();
-      const startToday = getStartOfDay(today);
-      const endToday = getEndOfDay(today);
+      const ordersRef = collection(db, 'Orders');
+      const today = new Date().toISOString().split('T')[0];
       
-      const ordersRef = collection(db, 'orders');
-      const q = query(ordersRef, 
-        where('createdAt', '>=', Timestamp.fromDate(startToday)),
-        where('createdAt', '<=', Timestamp.fromDate(endToday))
-      );
-      
-      onSnapshot(q, (snapshot) => {
+      // Lắng nghe tất cả đơn hàng, lọc phía client
+      onSnapshot(ordersRef, (snapshot) => {
         let totalRevenue = 0;
+        let orderCount = 0;
+        
         snapshot.forEach(doc => {
-          totalRevenue += doc.data().total || 0;
+          const order = doc.data();
+          const orderDate = getDateFromDatetime(order.datetime);
+          
+          if (orderDate === today && order.status !== 'cancelled') {
+            totalRevenue += order.total || 0;
+            orderCount++;
+          }
         });
         
         document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
-        document.getElementById('todayOrders').innerHTML = snapshot.size.toLocaleString('vi-VN');
+        document.getElementById('todayOrders').innerHTML = orderCount.toLocaleString('vi-VN');
+        
+        // Hiệu ứng flash
+        const revenueEl = document.getElementById('todayRevenue');
+        revenueEl.style.transform = 'scale(1.02)';
+        setTimeout(() => revenueEl.style.transform = 'scale(1)', 200);
+        
+        console.log(`📊 Hôm nay: ${orderCount} đơn, ${formatMoney(totalRevenue)}`);
+      }, (error) => {
+        console.error('Lỗi realtime orders:', error);
       });
     }
     
     // ========== REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
     function listenTopProducts() {
-      const productsRef = collection(db, 'products');
-      const q = query(productsRef, orderBy('sold', 'desc'), limit(5));
+      const productsRef = collection(db, 'Product');
       
-      onSnapshot(q, (snapshot) => {
+      onSnapshot(productsRef, (snapshot) => {
         const products = [];
         snapshot.forEach(doc => {
           const data = doc.data();
           products.push({
             name: data.name || 'Sản phẩm',
+            code: data.code || '',
             sold: data.sold || 0
           });
         });
         
-        if (products.length > 0) {
-          document.getElementById('topProducts').innerHTML = products.map((p, idx) => `
+        // Sắp xếp theo số lượng bán giảm dần và lấy top 5
+        const top5 = products.sort((a, b) => b.sold - a.sold).slice(0, 5);
+        
+        if (top5.length > 0) {
+          document.getElementById('topProducts').innerHTML = top5.map((p, idx) => `
             <li>
               <span class="staff-name">${idx + 1}. ${p.name}</span>
               <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
@@ -113,21 +129,32 @@
     
     // ========== REALTIME: TOP NHÂN VIÊN ==========
     function listenTopStaff() {
-      const staffRef = collection(db, 'staff');
-      const q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
+      const ordersRef = collection(db, 'Orders');
       
-      onSnapshot(q, (snapshot) => {
-        const staff = [];
+      onSnapshot(ordersRef, (snapshot) => {
+        const staffSales = {};
+        
         snapshot.forEach(doc => {
-          const data = doc.data();
-          staff.push({
-            name: data.name || data.fullName || 'Nhân viên',
-            total: data.totalSales || data.revenue || 0
-          });
+          const order = doc.data();
+          if (order.status === 'cancelled') return;
+          
+          const employee = order.employee || 'Unknown';
+          const total = order.total || 0;
+          
+          if (staffSales[employee]) {
+            staffSales[employee] += total;
+          } else {
+            staffSales[employee] = total;
+          }
         });
         
-        if (staff.length > 0) {
-          document.getElementById('topStaff').innerHTML = staff.map((s, idx) => `
+        // Chuyển thành mảng và sắp xếp
+        const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
+        staffArray.sort((a, b) => b.total - a.total);
+        const top5 = staffArray.slice(0, 5);
+        
+        if (top5.length > 0) {
+          document.getElementById('topStaff').innerHTML = top5.map((s, idx) => `
             <li>
               <span class="staff-name">${idx + 1}. ${s.name}</span>
               <span class="staff-amount">${formatMoney(s.total)}</span>
@@ -139,20 +166,22 @@
       });
     }
     
-    // ========== REALTIME: THUỐC SẮP HẾT ==========
+    // ========== REALTIME: THUỐC SẮP HẾT (stock < 10) ==========
     function listenLowStock() {
-      const productsRef = collection(db, 'products');
-      const q = query(productsRef, where('stock', '<', 10));
+      const productsRef = collection(db, 'Product');
       
-      onSnapshot(q, (snapshot) => {
+      onSnapshot(productsRef, (snapshot) => {
         const products = [];
         snapshot.forEach(doc => {
           const data = doc.data();
-          products.push({
-            name: data.name || 'Sản phẩm',
-            code: data.code || data.sku || '---',
-            stock: data.stock || 0
-          });
+          const stock = data.stock || 0;
+          if (stock < 10) {
+            products.push({
+              name: data.name || 'Sản phẩm',
+              code: data.code || '---',
+              stock: stock
+            });
+          }
         });
         
         products.sort((a, b) => a.stock - b.stock);
@@ -186,30 +215,30 @@
       });
     }
     
-    // ========== DOANH THU 7 NGÀY ==========
+    // ========== DOANH THU 7 NGÀY (lấy từ Orders) ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
       
+      // Lấy 7 ngày gần nhất
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
-        const startDate = getStartOfDay(date);
-        const endDate = getEndOfDay(date);
-        
-        dates.push(formatDate(date));
+        const dateStr = date.toISOString().split('T')[0];
+        const displayDate = `${date.getDate().toString().padStart(2,'0')}-${(date.getMonth()+1).toString().padStart(2,'0')}`;
+        dates.push(displayDate);
         
         try {
-          const ordersRef = collection(db, 'orders');
-          const q = query(ordersRef,
-            where('createdAt', '>=', Timestamp.fromDate(startDate)),
-            where('createdAt', '<=', Timestamp.fromDate(endDate))
-          );
+          const ordersRef = collection(db, 'Orders');
+          const snapshot = await getDocs(ordersRef);
           
-          const snapshot = await getDocs(q);
           let dailyTotal = 0;
           snapshot.forEach(doc => {
-            dailyTotal += doc.data().total || 0;
+            const order = doc.data();
+            const orderDate = getDateFromDatetime(order.datetime);
+            if (orderDate === dateStr && order.status !== 'cancelled') {
+              dailyTotal += order.total || 0;
+            }
           });
           revenues.push(dailyTotal);
         } catch (error) {
@@ -233,8 +262,7 @@
             data: values,
             backgroundColor: '#2a9d6e',
             borderRadius: 6,
-            barPercentage: 0.7,
-            categoryPercentage: 0.8
+            barPercentage: 0.7
           }]
         },
         options: {
@@ -273,7 +301,9 @@
       document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
     }
     
-    // Khởi động
+    // ========== KHỞI ĐỘNG ==========
+    console.log('🚀 Khởi động Dashboard với cấu trúc Orders/Product...');
+    
     listenTodayStats();
     listenTopProducts();
     listenTopStaff();
@@ -282,8 +312,8 @@
     updateTimestamp();
     setInterval(updateTimestamp, 1000);
     
-    // Refresh biểu đồ mỗi khi có đơn hàng mới
-    const ordersRef = collection(db, 'orders');
+    // Refresh biểu đồ khi có đơn hàng mới
+    const ordersRef = collection(db, 'Orders');
     onSnapshot(ordersRef, () => {
       loadRevenue7Days();
     });
@@ -296,12 +326,10 @@
       box-sizing: border-box;
     }
 
-    /* QUAN TRỌNG: Đảm bảo không bị cắt ở bất kỳ zoom nào */
     html {
       width: 100%;
       height: 100%;
       overflow-x: auto;
-      overflow-y: auto;
     }
 
     body {
@@ -311,11 +339,9 @@
       width: 100%;
       min-height: 100vh;
       padding: 16px;
-      /* Cho phép cuộn ngang nếu cần */
       overflow-x: auto;
     }
 
-    /* Container chính - responsive hoàn toàn */
     .dashboard {
       width: 100%;
       max-width: 1400px;
@@ -326,7 +352,6 @@
       gap: 16px;
     }
 
-    /* Header */
     h1 {
       text-align: center;
       font-size: clamp(18px, 5vw, 26px);
@@ -336,7 +361,6 @@
       justify-content: center;
       gap: 10px;
       flex-wrap: wrap;
-      margin-bottom: 4px;
     }
 
     .realtime-badge {
@@ -354,7 +378,6 @@
       100% { opacity: 0.6; }
     }
 
-    /* 2 ô trên cùng - co giãn linh hoạt */
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
@@ -380,10 +403,9 @@
       font-size: clamp(24px, 6vw, 42px);
       font-weight: bold;
       color: #1a6d4c;
-      word-break: break-word;
+      transition: transform 0.2s;
     }
 
-    /* Hàng giữa - responsive quan trọng */
     .middle-row {
       display: grid;
       grid-template-columns: 1.5fr 1fr;
@@ -397,7 +419,7 @@
       box-shadow: 0 2px 12px rgba(0,0,0,0.08);
       display: flex;
       flex-direction: column;
-      min-width: 0; /* Quan trọng: tràn flex */
+      min-width: 0;
     }
 
     .chart-card h3 {
@@ -411,7 +433,6 @@
       width: 100%;
       height: auto;
       min-height: 220px;
-      position: relative;
     }
 
     canvas {
@@ -470,10 +491,8 @@
     .staff-amount {
       color: #1a6d4c;
       font-weight: bold;
-      white-space: nowrap;
     }
 
-    /* Bảng dưới cùng - cuộn ngang nếu cần */
     .bottom-row {
       background: white;
       border-radius: 20px;
@@ -526,66 +545,16 @@
       font-size: 11px;
     }
 
-    /* ========== RESPONSIVE CHO MỌI KÍCH THƯỚC ========== */
-    
-    /* Màn hình nhỏ (dưới 768px) - chuyển sang dọc */
     @media (max-width: 768px) {
-      body {
-        padding: 12px;
-      }
-      .middle-row {
-        grid-template-columns: 1fr;
-        gap: 12px;
-      }
-      .chart-container {
-        min-height: 200px;
-      }
-      .stat-card {
-        padding: 12px;
-      }
+      body { padding: 12px; }
+      .middle-row { grid-template-columns: 1fr; gap: 12px; }
+      .chart-container { min-height: 200px; }
     }
-    
-    /* Màn hình rất nhỏ (dưới 480px) */
-    @media (max-width: 480px) {
-      .top-row {
-        gap: 10px;
-      }
-      .staff-name, .staff-amount {
-        font-size: 11px;
-      }
-    }
-    
-    /* Màn hình lớn (trên 1400px) - giữ tỷ lệ đẹp */
+
     @media (min-width: 1400px) {
-      .dashboard {
-        max-width: 1600px;
-      }
-      .stat-number {
-        font-size: 48px;
-      }
-      .chart-container {
-        min-height: 300px;
-      }
-    }
-    
-    /* Màn hình rất rộng */
-    @media (min-width: 1920px) {
-      .dashboard {
-        max-width: 1800px;
-      }
-      body {
-        padding: 24px;
-      }
-      .stat-number {
-        font-size: 56px;
-      }
-      .chart-container {
-        min-height: 350px;
-      }
-      th, td {
-        padding: 12px 10px;
-        font-size: 14px;
-      }
+      .dashboard { max-width: 1600px; }
+      .stat-number { font-size: 48px; }
+      .chart-container { min-height: 300px; }
     }
   </style>
 </head>
