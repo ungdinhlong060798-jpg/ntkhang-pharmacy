@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>NTK.Hang Pharmacy - Dashboard</title>
+  <title>NTK.Hang Pharmacy - Dashboard Realtime</title>
 
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -19,10 +19,11 @@
       getDocs, 
       orderBy, 
       limit,
+      onSnapshot,
       Timestamp 
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
     
-    // ========== FIREBASE CONFIG CỦA BẠN ==========
+    // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
       apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
       authDomain: "ntkhang-pharmacy.firebaseapp.com",
@@ -59,43 +60,55 @@
       return d;
     }
     
-    // ========== 1. DOANH THU & SỐ ĐƠN HÔM NAY ==========
-    async function getTodayStats() {
+    // Biến toàn cục lưu dữ liệu hiện tại
+    let currentChart = null;
+    let currentLowStock = [];
+    let currentTopProducts = [];
+    let currentTopStaff = [];
+    
+    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
+    function listenTodayStats() {
       const today = new Date();
       const startToday = getStartOfDay(today);
       const endToday = getEndOfDay(today);
       
-      try {
-        const ordersRef = collection(db, 'orders');
-        const q = query(ordersRef, 
-          where('createdAt', '>=', Timestamp.fromDate(startToday)),
-          where('createdAt', '<=', Timestamp.fromDate(endToday))
-        );
-        
-        const snapshot = await getDocs(q);
+      const ordersRef = collection(db, 'orders');
+      const q = query(ordersRef, 
+        where('createdAt', '>=', Timestamp.fromDate(startToday)),
+        where('createdAt', '<=', Timestamp.fromDate(endToday))
+      );
+      
+      // Lắng nghe thay đổi realtime
+      onSnapshot(q, (snapshot) => {
         let totalRevenue = 0;
         snapshot.forEach(doc => {
-          const data = doc.data();
-          totalRevenue += data.total || 0;
+          totalRevenue += doc.data().total || 0;
         });
         
-        return {
-          revenue: totalRevenue,
-          orderCount: snapshot.size
-        };
-      } catch (error) {
-        console.log('Lỗi lấy đơn hàng:', error);
-        return { revenue: 0, orderCount: 0 };
-      }
+        // Cập nhật giao diện ngay lập tức
+        document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
+        document.getElementById('todayOrders').innerHTML = snapshot.size.toLocaleString('vi-VN');
+        
+        // Thêm hiệu ứng flash khi có đơn mới
+        const revenueElement = document.getElementById('todayRevenue');
+        revenueElement.style.transition = '0.2s';
+        revenueElement.style.transform = 'scale(1.05)';
+        setTimeout(() => {
+          revenueElement.style.transform = 'scale(1)';
+        }, 300);
+        
+        console.log(`📊 Đã cập nhật: ${snapshot.size} đơn, ${formatMoney(totalRevenue)}`);
+      }, (error) => {
+        console.error('Lỗi realtime orders:', error);
+      });
     }
     
-    // ========== 2. TOP 5 THUỐC BÁN CHẠY ==========
-    async function getTopProducts() {
-      try {
-        const productsRef = collection(db, 'products');
-        const q = query(productsRef, orderBy('sold', 'desc'), limit(5));
-        const snapshot = await getDocs(q);
-        
+    // ========== 2. REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
+    function listenTopProducts() {
+      const productsRef = collection(db, 'products');
+      const q = query(productsRef, orderBy('sold', 'desc'), limit(5));
+      
+      onSnapshot(q, (snapshot) => {
         const products = [];
         snapshot.forEach(doc => {
           const data = doc.data();
@@ -105,21 +118,28 @@
           });
         });
         
-        return products;
-      } catch (error) {
-        console.log('Lỗi lấy top products:', error);
-        return [];
-      }
+        currentTopProducts = products;
+        
+        if (products.length > 0) {
+          document.getElementById('topProducts').innerHTML = products.map((p, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${p.name}</span>
+              <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
+            </li>
+          `).join('');
+        } else {
+          document.getElementById('topProducts').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+        }
+      });
     }
     
-    // ========== 3. TOP NHÂN VIÊN BÁN NHIỀU NHẤT ==========
-    async function getTopStaff() {
-      try {
-        // Thử collection 'staff' trước
-        let staffRef = collection(db, 'staff');
-        let q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
-        let snapshot = await getDocs(q);
-        
+    // ========== 3. REALTIME: TOP NHÂN VIÊN ==========
+    function listenTopStaff() {
+      // Thử collection 'staff' trước
+      let staffRef = collection(db, 'staff');
+      let q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
+      
+      onSnapshot(q, (snapshot) => {
         let staff = [];
         snapshot.forEach(doc => {
           const data = doc.data();
@@ -129,36 +149,50 @@
           });
         });
         
-        if (staff.length > 0) return staff;
-        
-        // Thử collection 'users'
-        staffRef = collection(db, 'users');
-        q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
-        snapshot = await getDocs(q);
-        
-        staff = [];
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          staff.push({
-            name: data.name || data.fullName || data.displayName || data.email,
-            total: data.totalSales || data.revenue || 0
+        if (staff.length > 0) {
+          currentTopStaff = staff;
+          document.getElementById('topStaff').innerHTML = staff.map((s, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${s.name}</span>
+              <span class="staff-amount">${formatMoney(s.total)}</span>
+            </li>
+          `).join('');
+        } else {
+          // Thử collection 'users'
+          const usersRef = collection(db, 'users');
+          const q2 = query(usersRef, orderBy('totalSales', 'desc'), limit(5));
+          onSnapshot(q2, (snapshot2) => {
+            const staff2 = [];
+            snapshot2.forEach(doc => {
+              const data = doc.data();
+              staff2.push({
+                name: data.name || data.fullName || data.displayName || data.email,
+                total: data.totalSales || data.revenue || 0
+              });
+            });
+            
+            if (staff2.length > 0) {
+              currentTopStaff = staff2;
+              document.getElementById('topStaff').innerHTML = staff2.map((s, idx) => `
+                <li>
+                  <span class="staff-name">${idx + 1}. ${s.name}</span>
+                  <span class="staff-amount">${formatMoney(s.total)}</span>
+                </li>
+              `).join('');
+            } else {
+              document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+            }
           });
-        });
-        
-        return staff;
-      } catch (error) {
-        console.log('Lỗi lấy top staff:', error);
-        return [];
-      }
+        }
+      });
     }
     
-    // ========== 4. THUỐC SẮP HẾT HÀNG ==========
-    async function getLowStock() {
-      try {
-        const productsRef = collection(db, 'products');
-        const q = query(productsRef, where('stock', '<', 10));
-        const snapshot = await getDocs(q);
-        
+    // ========== 4. REALTIME: THUỐC SẮP HẾT ==========
+    function listenLowStock() {
+      const productsRef = collection(db, 'products');
+      const q = query(productsRef, where('stock', '<', 10));
+      
+      onSnapshot(q, (snapshot) => {
         const products = [];
         snapshot.forEach(doc => {
           const data = doc.data();
@@ -170,55 +204,84 @@
         });
         
         products.sort((a, b) => a.stock - b.stock);
-        return products;
-      } catch (error) {
-        console.log('Lỗi lấy low stock:', error);
-        return [];
-      }
+        currentLowStock = products;
+        
+        if (products.length > 0) {
+          document.getElementById('lowStockTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              ${products.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>${p.code}</td>
+                  <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
+                  <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          `;
+        } else {
+          document.getElementById('lowStockTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+            </tbody>
+          `;
+        }
+      });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY ==========
-    async function getRevenue7Days() {
-      const dates = [];
-      const revenues = [];
+    // ========== 5. REALTIME: DOANH THU 7 NGÀY ==========
+    // Cập nhật biểu đồ mỗi khi có đơn hàng mới
+    function listenRevenue7Days() {
+      const ordersRef = collection(db, 'orders');
       
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const startDate = getStartOfDay(date);
-        const endDate = getEndOfDay(date);
+      // Lắng nghe tất cả đơn hàng (có thể tối ưu bằng cách chỉ lấy 7 ngày)
+      onSnapshot(ordersRef, async () => {
+        // Tính lại doanh thu 7 ngày
+        const dates = [];
+        const revenues = [];
         
-        dates.push(formatDate(date));
-        
-        try {
-          const ordersRef = collection(db, 'orders');
-          const q = query(ordersRef,
-            where('createdAt', '>=', Timestamp.fromDate(startDate)),
-            where('createdAt', '<=', Timestamp.fromDate(endDate))
-          );
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(date.getDate() - i);
+          const startDate = getStartOfDay(date);
+          const endDate = getEndOfDay(date);
           
-          const snapshot = await getDocs(q);
-          let dailyTotal = 0;
-          snapshot.forEach(doc => {
-            dailyTotal += doc.data().total || 0;
-          });
-          revenues.push(dailyTotal);
-        } catch (error) {
-          revenues.push(0);
+          dates.push(formatDate(date));
+          
+          try {
+            const q = query(ordersRef,
+              where('createdAt', '>=', Timestamp.fromDate(startDate)),
+              where('createdAt', '<=', Timestamp.fromDate(endDate))
+            );
+            
+            const snapshot = await getDocs(q);
+            let dailyTotal = 0;
+            snapshot.forEach(doc => {
+              dailyTotal += doc.data().total || 0;
+            });
+            revenues.push(dailyTotal);
+          } catch (error) {
+            revenues.push(0);
+          }
         }
-      }
-      
-      return { dates, revenues };
+        
+        // Vẽ lại biểu đồ
+        drawChart(dates, revenues);
+      });
     }
     
     // ========== VẼ BIỂU ĐỒ ==========
-    let chartInstance = null;
-    
     function drawChart(labels, values) {
       const ctx = document.getElementById('revenueChart').getContext('2d');
-      if (chartInstance) chartInstance.destroy();
+      if (currentChart) currentChart.destroy();
       
-      chartInstance = new Chart(ctx, {
+      currentChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
@@ -257,101 +320,28 @@
       });
     }
     
-    // ========== HIỂN THỊ DASHBOARD ==========
-    async function loadDashboard() {
-      try {
-        // Hiển thị loading
-        document.getElementById('todayRevenue').innerHTML = 'Đang tải...';
-        document.getElementById('todayOrders').innerHTML = 'Đang tải...';
-        document.getElementById('topProducts').innerHTML = '<li>Đang tải...</li>';
-        document.getElementById('topStaff').innerHTML = '<li>Đang tải...</li>';
-        
-        // Lấy tất cả dữ liệu song song
-        const [todayStats, topProducts, topStaff, lowStock, revenueData] = await Promise.all([
-          getTodayStats(),
-          getTopProducts(),
-          getTopStaff(),
-          getLowStock(),
-          getRevenue7Days()
-        ]);
-        
-        // Cập nhật doanh thu & số đơn hôm nay
-        document.getElementById('todayRevenue').innerHTML = formatMoney(todayStats.revenue);
-        document.getElementById('todayOrders').innerHTML = todayStats.orderCount.toLocaleString('vi-VN');
-        
-        // Cập nhật top sản phẩm
-        if (topProducts.length > 0) {
-          document.getElementById('topProducts').innerHTML = topProducts.map((p, idx) => `
-            <li>
-              <span class="staff-name">${idx + 1}. ${p.name}</span>
-              <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
-            </li>
-          `).join('');
-        } else {
-          document.getElementById('topProducts').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-        }
-        
-        // Cập nhật top nhân viên
-        if (topStaff.length > 0) {
-          document.getElementById('topStaff').innerHTML = topStaff.map((staff, idx) => `
-            <li>
-              <span class="staff-name">${idx + 1}. ${staff.name}</span>
-              <span class="staff-amount">${formatMoney(staff.total)}</span>
-            </li>
-          `).join('');
-        } else {
-          document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-        }
-        
-        // Cập nhật bảng hàng sắp hết
-        if (lowStock.length > 0) {
-          document.getElementById('lowStockTable').innerHTML = `
-            <thead>
-              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
-            </thead>
-            <tbody>
-              ${lowStock.map(p => `
-                <tr>
-                  <td>${p.name}</td>
-                  <td>${p.code}</td>
-                  <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
-                  <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          `;
-        } else {
-          document.getElementById('lowStockTable').innerHTML = `
-            <thead>
-              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
-            </tbody>
-          `;
-        }
-        
-        // Vẽ biểu đồ
-        drawChart(revenueData.dates, revenueData.revenues);
-        
-        // Cập nhật thời gian
-        document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
-        
-        // Ẩn loading
-        document.getElementById('todayRevenue').style.opacity = '1';
-        
-      } catch (error) {
-        console.error('Lỗi tải dashboard:', error);
-        document.getElementById('todayRevenue').innerHTML = 'Lỗi kết nối';
-        document.getElementById('topProducts').innerHTML = '<li>❌ Lỗi kết nối Firebase</li>';
-      }
+    // ========== HIỂN THỊ THỜI GIAN CẬP NHẬT ==========
+    function updateTimestamp() {
+      const now = new Date();
+      document.getElementById('updateTime').innerHTML = `🟢 Realtime đang hoạt động | Cập nhật: ${now.toLocaleString('vi-VN')}`;
     }
     
-    // Chạy dashboard ngay khi tải trang
-    loadDashboard();
+    // Cập nhật timestamp mỗi giây
+    setInterval(updateTimestamp, 1000);
     
-    // Tự động refresh mỗi 5 phút (300000 ms)
-    setInterval(loadDashboard, 300000);
+    // ========== KHỞI ĐỘNG TẤT CẢ REALTIME LISTENERS ==========
+    console.log('🚀 Khởi động Dashboard Realtime...');
+    
+    listenTodayStats();      // Lắng nghe đơn hàng hôm nay
+    listenTopProducts();     // Lắng nghe top sản phẩm
+    listenTopStaff();        // Lắng nghe top nhân viên
+    listenLowStock();        // Lắng nghe hàng sắp hết
+    listenRevenue7Days();    // Lắng nghe doanh thu 7 ngày
+    
+    updateTimestamp();
+    
+    // Hiển thị trạng thái kết nối
+    console.log('✅ Dashboard Realtime đã sẵn sàng!');
   </script>
 
   <style>
@@ -396,6 +386,21 @@
       gap: 10px;
     }
 
+    .realtime-badge {
+      background: #2a9d6e;
+      color: white;
+      font-size: 12px;
+      padding: 4px 12px;
+      border-radius: 20px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
     /* 2 ô trên cùng */
     .top-row {
       display: grid;
@@ -428,6 +433,7 @@
       font-size: 52px;
       font-weight: bold;
       color: #1a6d4c;
+      transition: transform 0.2s;
     }
 
     /* Giữa: biểu đồ + 2 box phải */
@@ -572,6 +578,9 @@
       margin-top: 10px;
       color: #8aa99e;
       font-size: 13px;
+      padding: 8px;
+      background: rgba(255,255,255,0.5);
+      border-radius: 20px;
     }
 
     /* Responsive mobile */
@@ -600,7 +609,10 @@
 </head>
 <body>
 <div class="dashboard">
-  <h1>💊 NTK.Hang Pharmacy Dashboard</h1>
+  <h1>
+    💊 NTK.Hang Pharmacy Dashboard 
+    <span class="realtime-badge">🔴 LIVE</span>
+  </h1>
 
   <!-- Hàng trên -->
   <div class="top-row">
