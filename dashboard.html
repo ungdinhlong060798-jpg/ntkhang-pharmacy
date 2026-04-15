@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-        .map(([name, total]) => `<li>${name} — ${formatMoney(total)}</li>`)
-        .join('');
+      document.getElementById('topStaff').innerHTML = topStaff
+  .map(([name, total]) => `<li>${name} — ${formatMoney(total)}</li>`)
+  .join('');
 
       const lowStock = products
         .filter(p => (p.stock || 0) < 10)
