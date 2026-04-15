@@ -8,9 +8,8 @@
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
-  <!-- Firebase SDK (phiên bản 9+ modular) -->
+  <!-- Firebase SDK -->
   <script type="module">
-    // ========== IMPORT FIREBASE ==========
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
     import { 
       getFirestore, 
@@ -23,15 +22,14 @@
       Timestamp 
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
     
-    // ========== CẤU HÌNH FIREBASE (THAY BẰNG CỦA BẠN) ==========
-    // 🔥 COPY TỪ file index.html CỦA BẠN VÀO ĐÂY 🔥
+    // ========== FIREBASE CONFIG CỦA BẠN ==========
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT.firebaseapp.com",
-      projectId: "YOUR_PROJECT_ID",
-      storageBucket: "YOUR_PROJECT.appspot.com",
-      messagingSenderId: "YOUR_SENDER_ID",
-      appId: "YOUR_APP_ID"
+      apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
+      authDomain: "ntkhang-pharmacy.firebaseapp.com",
+      projectId: "ntkhang-pharmacy",
+      storageBucket: "ntkhang-pharmacy.firebasestorage.app",
+      messagingSenderId: "366824735651",
+      appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
     };
     
     // Khởi tạo Firebase
@@ -49,7 +47,6 @@
       return `${d.getDate().toString().padStart(2,'0')}-${(d.getMonth()+1).toString().padStart(2,'0')}`;
     }
     
-    // Lấy đầu ngày và cuối ngày
     function getStartOfDay(date) {
       const d = new Date(date);
       d.setHours(0, 0, 0, 0);
@@ -68,29 +65,33 @@
       const startToday = getStartOfDay(today);
       const endToday = getEndOfDay(today);
       
-      const ordersRef = collection(db, 'orders');
-      const q = query(ordersRef, 
-        where('createdAt', '>=', Timestamp.fromDate(startToday)),
-        where('createdAt', '<=', Timestamp.fromDate(endToday))
-      );
-      
-      const snapshot = await getDocs(q);
-      let totalRevenue = 0;
-      snapshot.forEach(doc => {
-        const data = doc.data();
-        totalRevenue += data.total || 0;
-      });
-      
-      return {
-        revenue: totalRevenue,
-        orderCount: snapshot.size
-      };
+      try {
+        const ordersRef = collection(db, 'orders');
+        const q = query(ordersRef, 
+          where('createdAt', '>=', Timestamp.fromDate(startToday)),
+          where('createdAt', '<=', Timestamp.fromDate(endToday))
+        );
+        
+        const snapshot = await getDocs(q);
+        let totalRevenue = 0;
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          totalRevenue += data.total || 0;
+        });
+        
+        return {
+          revenue: totalRevenue,
+          orderCount: snapshot.size
+        };
+      } catch (error) {
+        console.log('Lỗi lấy đơn hàng:', error);
+        return { revenue: 0, orderCount: 0 };
+      }
     }
     
     // ========== 2. TOP 5 THUỐC BÁN CHẠY ==========
     async function getTopProducts() {
       try {
-        // Thử lấy từ collection 'products' với field 'sold'
         const productsRef = collection(db, 'products');
         const q = query(productsRef, orderBy('sold', 'desc'), limit(5));
         const snapshot = await getDocs(q);
@@ -99,50 +100,43 @@
         snapshot.forEach(doc => {
           const data = doc.data();
           products.push({
-            name: data.name || data.productName || 'Unknown',
-            sold: data.sold || data.quantitySold || 0
+            name: data.name || 'Sản phẩm',
+            sold: data.sold || 0
           });
         });
         
         return products;
       } catch (error) {
         console.log('Lỗi lấy top products:', error);
-        // Nếu chưa có field 'sold', dùng mẫu
-        return [
-          { name: "Paracetamol 500mg", sold: 245 },
-          { name: "Amoxicillin 250mg", sold: 198 },
-          { name: "Vitamin C 1000mg", sold: 167 },
-          { name: "Ibuprofen 400mg", sold: 134 },
-          { name: "Omeprazole 20mg", sold: 112 }
-        ];
+        return [];
       }
     }
     
-    // ========== 3. TOP NHÂN VIÊN ==========
+    // ========== 3. TOP NHÂN VIÊN BÁN NHIỀU NHẤT ==========
     async function getTopStaff() {
       try {
-        // Thử lấy từ collection 'users' hoặc 'staff'
-        let staffRef;
-        try {
-          staffRef = collection(db, 'staff');
-          const q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
-          const snapshot = await getDocs(q);
-          const staff = [];
-          snapshot.forEach(doc => {
-            const data = doc.data();
-            staff.push({
-              name: data.name || data.fullName || data.displayName,
-              total: data.totalSales || data.revenue || 0
-            });
+        // Thử collection 'staff' trước
+        let staffRef = collection(db, 'staff');
+        let q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
+        let snapshot = await getDocs(q);
+        
+        let staff = [];
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          staff.push({
+            name: data.name || data.fullName || 'Nhân viên',
+            total: data.totalSales || data.revenue || 0
           });
-          if (staff.length > 0) return staff;
-        } catch(e) {}
+        });
+        
+        if (staff.length > 0) return staff;
         
         // Thử collection 'users'
         staffRef = collection(db, 'users');
-        const q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
-        const snapshot = await getDocs(q);
-        const staff = [];
+        q = query(staffRef, orderBy('totalSales', 'desc'), limit(5));
+        snapshot = await getDocs(q);
+        
+        staff = [];
         snapshot.forEach(doc => {
           const data = doc.data();
           staff.push({
@@ -151,26 +145,14 @@
           });
         });
         
-        return staff.length > 0 ? staff : [
-          { name: "Nguyễn Văn A", total: 12500000 },
-          { name: "Trần Thị B", total: 9800000 },
-          { name: "Lê Văn C", total: 8700000 },
-          { name: "Phạm Thị D", total: 7200000 },
-          { name: "Hoàng Văn E", total: 6500000 }
-        ];
+        return staff;
       } catch (error) {
         console.log('Lỗi lấy top staff:', error);
-        return [
-          { name: "Nguyễn Văn A", total: 12500000 },
-          { name: "Trần Thị B", total: 9800000 },
-          { name: "Lê Văn C", total: 8700000 },
-          { name: "Phạm Thị D", total: 7200000 },
-          { name: "Hoàng Văn E", total: 6500000 }
-        ];
+        return [];
       }
     }
     
-    // ========== 4. THUỐC SẮP HẾT (stock < 10) ==========
+    // ========== 4. THUỐC SẮP HẾT HÀNG ==========
     async function getLowStock() {
       try {
         const productsRef = collection(db, 'products');
@@ -181,31 +163,17 @@
         snapshot.forEach(doc => {
           const data = doc.data();
           products.push({
-            name: data.name || data.productName,
-            code: data.code || data.sku || data.productCode,
+            name: data.name || 'Sản phẩm',
+            code: data.code || data.sku || '---',
             stock: data.stock || 0
           });
         });
-        
-        if (products.length === 0) {
-          return [
-            { name: "Aspirin", code: "A007", stock: 1 },
-            { name: "Omeprazole", code: "O005", stock: 2 },
-            { name: "Amoxicillin", code: "A002", stock: 3 },
-            { name: "Loratadine", code: "L006", stock: 4 },
-            { name: "Paracetamol", code: "P001", stock: 5 }
-          ];
-        }
         
         products.sort((a, b) => a.stock - b.stock);
         return products;
       } catch (error) {
         console.log('Lỗi lấy low stock:', error);
-        return [
-          { name: "Aspirin", code: "A007", stock: 1 },
-          { name: "Omeprazole", code: "O005", stock: 2 },
-          { name: "Amoxicillin", code: "A002", stock: 3 }
-        ];
+        return [];
       }
     }
     
@@ -236,9 +204,7 @@
           });
           revenues.push(dailyTotal);
         } catch (error) {
-          // Nếu chưa có dữ liệu, dùng mẫu
-          const mockData = [1406347, 5234495, 5372788, 5398766, 3278369, 4852000, 6100000];
-          revenues.push(mockData[i]);
+          revenues.push(0);
         }
       }
       
@@ -279,6 +245,7 @@
           },
           scales: {
             y: {
+              beginAtZero: true,
               ticks: {
                 callback: function(value) {
                   return value.toLocaleString('vi-VN') + ' ₫';
@@ -296,6 +263,8 @@
         // Hiển thị loading
         document.getElementById('todayRevenue').innerHTML = 'Đang tải...';
         document.getElementById('todayOrders').innerHTML = 'Đang tải...';
+        document.getElementById('topProducts').innerHTML = '<li>Đang tải...</li>';
+        document.getElementById('topStaff').innerHTML = '<li>Đang tải...</li>';
         
         // Lấy tất cả dữ liệu song song
         const [todayStats, topProducts, topStaff, lowStock, revenueData] = await Promise.all([
@@ -311,60 +280,78 @@
         document.getElementById('todayOrders').innerHTML = todayStats.orderCount.toLocaleString('vi-VN');
         
         // Cập nhật top sản phẩm
-        const topProductsHtml = topProducts.map((p, idx) => `
-          <li>
-            <span class="staff-name">${idx + 1}. ${p.name}</span>
-            <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
-          </li>
-        `).join('');
-        document.getElementById('topProducts').innerHTML = topProductsHtml || '<li>Chưa có dữ liệu</li>';
+        if (topProducts.length > 0) {
+          document.getElementById('topProducts').innerHTML = topProducts.map((p, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${p.name}</span>
+              <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
+            </li>
+          `).join('');
+        } else {
+          document.getElementById('topProducts').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+        }
         
         // Cập nhật top nhân viên
-        const topStaffHtml = topStaff.map((staff, idx) => `
-          <li>
-            <span class="staff-name">${idx + 1}. ${staff.name}</span>
-            <span class="staff-amount">${formatMoney(staff.total)}</span>
-          </li>
-        `).join('');
-        document.getElementById('topStaff').innerHTML = topStaffHtml || '<li>Chưa có dữ liệu</li>';
+        if (topStaff.length > 0) {
+          document.getElementById('topStaff').innerHTML = topStaff.map((staff, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${staff.name}</span>
+              <span class="staff-amount">${formatMoney(staff.total)}</span>
+            </li>
+          `).join('');
+        } else {
+          document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+        }
         
         // Cập nhật bảng hàng sắp hết
-        const lowStockHtml = lowStock.map(p => `
-          <tr>
-            <td>${p.name}</td>
-            <td>${p.code || '---'}</td>
-            <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
-            <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
-          </tr>
-        `).join('');
-        
-        document.getElementById('lowStockTable').innerHTML = `
-          <thead>
-            <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
-          </thead>
-          <tbody>
-            ${lowStockHtml || '<tr><td colspan="4">🎉 Không có hàng sắp hết!</td></tr>'}
-          </tbody>
-        `;
+        if (lowStock.length > 0) {
+          document.getElementById('lowStockTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              ${lowStock.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>${p.code}</td>
+                  <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
+                  <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          `;
+        } else {
+          document.getElementById('lowStockTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+            </tbody>
+          `;
+        }
         
         // Vẽ biểu đồ
         drawChart(revenueData.dates, revenueData.revenues);
         
         // Cập nhật thời gian
-        document.getElementById('updateTime').innerHTML = `🔄 Cập nhật: ${new Date().toLocaleString('vi-VN')}`;
+        document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
+        
+        // Ẩn loading
+        document.getElementById('todayRevenue').style.opacity = '1';
         
       } catch (error) {
         console.error('Lỗi tải dashboard:', error);
-        document.getElementById('todayRevenue').innerHTML = 'Lỗi tải';
+        document.getElementById('todayRevenue').innerHTML = 'Lỗi kết nối';
         document.getElementById('topProducts').innerHTML = '<li>❌ Lỗi kết nối Firebase</li>';
       }
     }
     
-    // Chạy dashboard
+    // Chạy dashboard ngay khi tải trang
     loadDashboard();
     
-    // Tự động refresh mỗi 5 phút
-    setInterval(loadDashboard, 5 * 60 * 1000);
+    // Tự động refresh mỗi 5 phút (300000 ms)
+    setInterval(loadDashboard, 300000);
   </script>
 
   <style>
@@ -383,7 +370,7 @@
 
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
-      padding: 16px;
+      padding: 20px;
       color: #1a3a2e;
       min-height: 100vh;
     }
@@ -395,46 +382,50 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
     h1 {
       text-align: center;
       margin-bottom: 0;
       color: #1a6d4c;
-      font-size: clamp(20px, 4vw, 28px);
+      font-size: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
     }
 
     /* 2 ô trên cùng */
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 20px;
     }
 
     .stat-card {
       background: white;
       border-radius: 24px;
-      padding: 24px 20px;
+      padding: 28px 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       text-align: center;
       transition: transform 0.2s, box-shadow 0.2s;
     }
 
     .stat-card:hover {
-      transform: translateY(-2px);
+      transform: translateY(-3px);
       box-shadow: 0 8px 30px rgba(0,0,0,0.12);
     }
 
     .stat-card h3 {
-      font-size: clamp(14px, 2.5vw, 18px);
+      font-size: 18px;
       color: #5a6e66;
       margin-bottom: 12px;
       font-weight: 500;
     }
 
     .stat-number {
-      font-size: clamp(32px, 6vw, 52px);
+      font-size: 52px;
       font-weight: bold;
       color: #1a6d4c;
     }
@@ -443,29 +434,29 @@
     .middle-row {
       display: grid;
       grid-template-columns: 1.6fr 1fr;
-      gap: 16px;
-      min-height: 380px;
+      gap: 20px;
+      min-height: 400px;
     }
 
     .chart-card {
       background: white;
       border-radius: 24px;
-      padding: 16px;
+      padding: 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       display: flex;
       flex-direction: column;
     }
 
     .chart-card h3 {
-      font-size: clamp(14px, 2.5vw, 18px);
-      margin-bottom: 12px;
+      font-size: 18px;
+      margin-bottom: 16px;
       color: #1a6d4c;
       padding-left: 8px;
     }
 
     .chart-container {
       flex: 1;
-      min-height: 280px;
+      min-height: 300px;
     }
 
     canvas {
@@ -476,20 +467,20 @@
     .right-stack {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
     .info-card {
       background: white;
       border-radius: 24px;
-      padding: 16px;
+      padding: 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
       flex: 1;
     }
 
     .info-card h3 {
-      font-size: clamp(14px, 2.5vw, 18px);
-      margin-bottom: 12px;
+      font-size: 18px;
+      margin-bottom: 16px;
       color: #1a6d4c;
       border-left: 4px solid #1a6d4c;
       padding-left: 12px;
@@ -503,7 +494,7 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 0;
+      padding: 12px 0;
       border-bottom: 1px solid #e8f0ec;
     }
 
@@ -513,28 +504,28 @@
 
     .staff-name {
       font-weight: 500;
-      font-size: clamp(12px, 2vw, 14px);
+      font-size: 15px;
     }
 
     .staff-amount {
       color: #1a6d4c;
       font-weight: bold;
-      font-size: clamp(12px, 2vw, 14px);
+      font-size: 15px;
     }
 
     /* Bảng dưới cùng */
     .bottom-row {
       background: white;
       border-radius: 24px;
-      padding: 16px;
+      padding: 20px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.08);
-      max-height: 320px;
+      max-height: 350px;
       overflow-y: auto;
     }
 
     .bottom-row h3 {
-      font-size: clamp(14px, 2.5vw, 18px);
-      margin-bottom: 12px;
+      font-size: 18px;
+      margin-bottom: 16px;
       color: #1a6d4c;
       border-left: 4px solid #1a6d4c;
       padding-left: 12px;
@@ -552,10 +543,10 @@
     }
 
     th, td {
-      padding: 12px 8px;
+      padding: 12px 10px;
       text-align: left;
       border-bottom: 1px solid #e8f0ec;
-      font-size: clamp(12px, 2vw, 14px);
+      font-size: 14px;
     }
 
     th {
@@ -578,9 +569,9 @@
 
     .update-time {
       text-align: center;
-      margin-top: 8px;
+      margin-top: 10px;
       color: #8aa99e;
-      font-size: 12px;
+      font-size: 13px;
     }
 
     /* Responsive mobile */
@@ -588,15 +579,18 @@
       body {
         padding: 12px;
       }
+      .stat-number {
+        font-size: 36px;
+      }
       .middle-row {
         grid-template-columns: 1fr;
         gap: 12px;
       }
       .chart-container {
-        min-height: 220px;
+        min-height: 250px;
       }
       .bottom-row {
-        max-height: 280px;
+        max-height: 300px;
       }
       .stat-card {
         padding: 16px;
@@ -633,13 +627,13 @@
       <div class="info-card">
         <h3>🏆 Top 5 thuốc bán chạy</h3>
         <ul class="top-list" id="topProducts">
-          <li>Đang tải...</li>
+          <li>Đang tải dữ liệu...</li>
         </ul>
       </div>
       <div class="info-card">
         <h3>👩‍⚕️ Top nhân viên bán nhiều nhất</h3>
         <ul class="top-list" id="topStaff">
-          <li>Đang tải...</li>
+          <li>Đang tải dữ liệu...</li>
         </ul>
       </div>
     </div>
@@ -653,7 +647,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải...</td></tr>
+        <tr><td colspan="4">Đang tải dữ liệu...</td></tr>
       </tbody>
     </table>
   </div>
