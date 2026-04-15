@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+        .map(([name, total]) => `<li>${name} — ${formatMoney(total)}</li>`)
+        .join('');
+
+      const lowStock = products
+        .filter(p => (p.stock || 0) < 10)
+        .sort((a,b) => a.stock - b.stock);
+
+      document.getElementById('lowStockTable').innerHTML = lowStock
+        .map(p => `
+          <tr>
+            <td>${p.name}</td>
+            <td>${p.code}</td>
+            <td class="low-stock">${p.stock}</td>
+            <td>${p.unit || ''}</td>
+          </tr>
+        `)
+        .join('');
+
+      const labels = [];
+      const values = [];
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const key = d.toISOString().slice(0,10);
+        labels.push(key.slice(5));
+
+        const revenue = validOrders
+          .filter(o => o.datetime && o.datetime.slice(0,10) === key)
+          .reduce((sum, o) => sum + (o.total || 0), 0);
+
+        values.push(revenue);
+      }
+
+      new Chart(document.getElementById('revenueChart'), {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Doanh thu',
+            data: values
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false }
+          },
+          scales: {
+            y: {
+              ticks: {
+                callback: value => value.toLocaleString('vi-VN')
+              }
+            }
+          }
+        }
+      });
+
+      document.getElementById('updatedTime').textContent =
+        'Cập nhật: ' + new Date().toLocaleString('vi-VN');
+    }
+
+    loadDashboard();
+
+    setInterval(() => {
+      location.reload();
+    }, 30 * 60 * 1000);
+  </script>
+</body>
+</html>
