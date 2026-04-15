@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-  <title>NTK.Hang Pharmacy - Dashboard Realtime</title>
+  <title>NTK.Hang Pharmacy - Dashboard</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
@@ -20,6 +20,7 @@
       onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
     
+    // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
       apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
       authDomain: "ntkhang-pharmacy.firebaseapp.com",
@@ -38,36 +39,19 @@
       return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
     }
     
-    // Lấy ngày từ string datetime "2026-04-11T15:14:46.353Z"
+    // Lấy ngày từ datetime string "2026-04-11T15:14:46.353Z"
     function getDateFromDatetime(datetimeStr) {
       if (!datetimeStr) return null;
       return datetimeStr.split('T')[0]; // "2026-04-11"
     }
     
-    function isToday(dateStr) {
-      if (!dateStr) return false;
-      const today = new Date().toISOString().split('T')[0];
-      return dateStr === today;
-    }
-    
-    function getStartOfDay(dateStr) {
-      return dateStr;
-    }
-    
-    // Lấy doanh thu từ đơn hàng (chỉ tính đơn có status không phải cancelled)
-    function getOrderTotal(order) {
-      if (order.status === 'cancelled') return 0;
-      return order.total || 0;
-    }
-    
     let currentChart = null;
     
-    // ========== REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
+    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
-      const ordersRef = collection(db, 'Orders');
+      const ordersRef = collection(db, 'orders');
       const today = new Date().toISOString().split('T')[0];
       
-      // Lắng nghe tất cả đơn hàng, lọc phía client
       onSnapshot(ordersRef, (snapshot) => {
         let totalRevenue = 0;
         let orderCount = 0;
@@ -76,6 +60,7 @@
           const order = doc.data();
           const orderDate = getDateFromDatetime(order.datetime);
           
+          // Chỉ tính đơn chưa cancelled và đúng ngày hôm nay
           if (orderDate === today && order.status !== 'cancelled') {
             totalRevenue += order.total || 0;
             orderCount++;
@@ -85,40 +70,53 @@
         document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
         document.getElementById('todayOrders').innerHTML = orderCount.toLocaleString('vi-VN');
         
-        // Hiệu ứng flash
+        // Hiệu ứng flash khi có thay đổi
         const revenueEl = document.getElementById('todayRevenue');
         revenueEl.style.transform = 'scale(1.02)';
         setTimeout(() => revenueEl.style.transform = 'scale(1)', 200);
         
         console.log(`📊 Hôm nay: ${orderCount} đơn, ${formatMoney(totalRevenue)}`);
       }, (error) => {
-        console.error('Lỗi realtime orders:', error);
+        console.error('Lỗi lắng nghe orders:', error);
       });
     }
     
-    // ========== REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
+    // ========== 2. REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
+    // Tính trực tiếp từ đơn hàng (chính xác 100%)
     function listenTopProducts() {
-      const productsRef = collection(db, 'Product');
+      const ordersRef = collection(db, 'orders');
       
-      onSnapshot(productsRef, (snapshot) => {
-        const products = [];
+      onSnapshot(ordersRef, (snapshot) => {
+        const productSales = {}; // { productName: quantity }
+        
         snapshot.forEach(doc => {
-          const data = doc.data();
-          products.push({
-            name: data.name || 'Sản phẩm',
-            code: data.code || '',
-            sold: data.sold || 0
+          const order = doc.data();
+          // Bỏ qua đơn đã cancelled
+          if (order.status === 'cancelled') return;
+          
+          const items = order.items || [];
+          items.forEach(item => {
+            const productName = item.name;
+            const quantity = item.quantity || 1;
+            
+            if (productSales[productName]) {
+              productSales[productName] += quantity;
+            } else {
+              productSales[productName] = quantity;
+            }
           });
         });
         
-        // Sắp xếp theo số lượng bán giảm dần và lấy top 5
-        const top5 = products.sort((a, b) => b.sold - a.sold).slice(0, 5);
+        // Chuyển thành mảng và sắp xếp
+        const productsArray = Object.entries(productSales).map(([name, sold]) => ({ name, sold }));
+        productsArray.sort((a, b) => b.sold - a.sold);
+        const top5 = productsArray.slice(0, 5);
         
         if (top5.length > 0) {
           document.getElementById('topProducts').innerHTML = top5.map((p, idx) => `
             <li>
               <span class="staff-name">${idx + 1}. ${p.name}</span>
-              <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} đơn</span>
+              <span class="staff-amount">${p.sold.toLocaleString('vi-VN')} cái</span>
             </li>
           `).join('');
         } else {
@@ -127,9 +125,9 @@
       });
     }
     
-    // ========== REALTIME: TOP NHÂN VIÊN ==========
+    // ========== 3. REALTIME: TOP NHÂN VIÊN ==========
     function listenTopStaff() {
-      const ordersRef = collection(db, 'Orders');
+      const ordersRef = collection(db, 'orders');
       
       onSnapshot(ordersRef, (snapshot) => {
         const staffSales = {};
@@ -166,9 +164,9 @@
       });
     }
     
-    // ========== REALTIME: THUỐC SẮP HẾT (stock < 10) ==========
+    // ========== 4. REALTIME: THUỐC SẮP HẾT (stock < 10) ==========
     function listenLowStock() {
-      const productsRef = collection(db, 'Product');
+      const productsRef = collection(db, 'products');
       
       onSnapshot(productsRef, (snapshot) => {
         const products = [];
@@ -215,21 +213,20 @@
       });
     }
     
-    // ========== DOANH THU 7 NGÀY (lấy từ Orders) ==========
+    // ========== 5. DOANH THU 7 NGÀY ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
       
-      // Lấy 7 ngày gần nhất
       for (let i = 6; i >= 0; i--) {
         const date = new Date();
         date.setDate(date.getDate() - i);
         const dateStr = date.toISOString().split('T')[0];
-        const displayDate = `${date.getDate().toString().padStart(2,'0')}-${(date.getMonth()+1).toString().padStart(2,'0')}`;
+        const displayDate = `${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
         dates.push(displayDate);
         
         try {
-          const ordersRef = collection(db, 'Orders');
+          const ordersRef = collection(db, 'orders');
           const snapshot = await getDocs(ordersRef);
           
           let dailyTotal = 0;
@@ -284,12 +281,8 @@
               ticks: {
                 callback: function(value) {
                   return value.toLocaleString('vi-VN');
-                },
-                font: { size: 11 }
+                }
               }
-            },
-            x: {
-              ticks: { font: { size: 11 } }
             }
           }
         }
@@ -302,18 +295,19 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với cấu trúc Orders/Product...');
+    console.log('🚀 Khởi động Dashboard với collection: orders, products, staff');
     
-    listenTodayStats();
-    listenTopProducts();
-    listenTopStaff();
-    listenLowStock();
-    loadRevenue7Days();
+    listenTodayStats();   // Lắng nghe đơn hàng hôm nay
+    listenTopProducts();  // Lắng nghe top sản phẩm (tính từ orders)
+    listenTopStaff();     // Lắng nghe top nhân viên (tính từ orders)
+    listenLowStock();     // Lắng nghe hàng sắp hết (từ products)
+    loadRevenue7Days();   // Tải biểu đồ 7 ngày
+    
     updateTimestamp();
     setInterval(updateTimestamp, 1000);
     
     // Refresh biểu đồ khi có đơn hàng mới
-    const ordersRef = collection(db, 'Orders');
+    const ordersRef = collection(db, 'orders');
     onSnapshot(ordersRef, () => {
       loadRevenue7Days();
     });
