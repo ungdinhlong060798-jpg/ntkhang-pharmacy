@@ -111,6 +111,7 @@
         staffArray.sort((a, b) => b.total - a.total);
         const top5 = staffArray.slice(0, 5);
         
+        // Cập nhật danh sách top nhân viên bên phải
         if (top5.length > 0) {
           document.getElementById('topStaff').innerHTML = top5.map((s, idx) => `
             <li>
@@ -122,65 +123,75 @@
           document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
         }
         
+        // Vẽ lại biểu đồ tròn
         drawPieChart(staffArray);
       });
     }
     
     function drawPieChart(staffData) {
       const ctx = document.getElementById('pieChart').getContext('2d');
-      if (pieChart) pieChart.destroy();
+      if (pieChart) {
+        pieChart.destroy();
+      }
+      
+      if (!staffData || staffData.length === 0) {
+        // Hiển thị thông báo khi không có dữ liệu
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('Chưa có dữ liệu', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return;
+      }
       
       const colors = ['#9b59b6', '#f1c40f', '#2a9d6e', '#e74c3c', '#3498db'];
       const labels = staffData.map(s => s.name);
       const values = staffData.map(s => s.total);
       const total = values.reduce((a, b) => a + b, 0);
       
-      if (staffData.length > 0) {
-        pieChart = new Chart(ctx, {
-          type: 'pie',
-          data: {
-            labels: labels,
-            datasets: [{
-              data: values,
-              backgroundColor: colors.slice(0, staffData.length),
-              borderWidth: 0,
-              hoverOffset: 8
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  font: { size: 10 },
-                  boxWidth: 10,
-                  generateLabels: function(chart) {
-                    const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                    original.forEach((label, i) => {
-                      const value = chart.data.datasets[0].data[i];
-                      const percent = ((value / total) * 100).toFixed(1);
-                      label.text = `${label.text}: ${percent}%`;
-                    });
-                    return original;
-                  }
-                }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    const label = context.label || '';
-                    const value = context.raw || 0;
+      pieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, staffData.length),
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 10 },
+                boxWidth: 10,
+                generateLabels: function(chart) {
+                  const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                  original.forEach((label, i) => {
+                    const value = chart.data.datasets[0].data[i];
                     const percent = ((value / total) * 100).toFixed(1);
-                    return `${label}: ${formatMoney(value)} (${percent}%)`;
-                  }
+                    label.text = `${label.text}: ${percent}%`;
+                  });
+                  return original;
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.raw || 0;
+                  const percent = ((value / total) * 100).toFixed(1);
+                  return `${label}: ${formatMoney(value)} (${percent}%)`;
                 }
               }
             }
           }
-        });
-      }
+        }
+      });
     }
     
     // ========== 3. REALTIME: TOP 5 SẢN PHẨM (BIỂU ĐỒ THANH NGANG) ==========
@@ -219,69 +230,57 @@
       const ctx = document.getElementById('horizontalBarChart').getContext('2d');
       if (horizontalBarChart) horizontalBarChart.destroy();
       
+      if (!data || data.length === 0) {
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('Chưa có dữ liệu', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        return;
+      }
+      
       const labels = data.map(p => p.name);
       const values = data.map(p => p.sold);
       
-      if (data.length > 0) {
-        horizontalBarChart = new Chart(ctx, {
-          type: 'bar',
-          data: {
-            labels: labels,
-            datasets: [{
-              label: 'Số lượng bán',
-              data: values,
-              backgroundColor: '#1a5276',
-              borderRadius: 6,
-              barPercentage: 0.7,
-              categoryPercentage: 0.8
-            }]
-          },
-          options: {
-            indexAxis: 'y',
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-              legend: { display: false },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    return `Số lượng: ${context.raw} cái`;
-                  }
+      horizontalBarChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Số lượng bán',
+            data: values,
+            backgroundColor: '#1a5276',
+            borderRadius: 6,
+            barPercentage: 0.7,
+            categoryPercentage: 0.8
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `Số lượng: ${context.raw} cái`;
                 }
-              },
-              datalabels: false
-            },
-            scales: {
-              x: {
-                grid: { display: false },
-                ticks: { font: { size: 9 } },
-                title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
-              },
-              y: {
-                grid: { display: false },
-                ticks: { font: { size: 10 } }
               }
             }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 9 } },
+              title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { font: { size: 10 } }
+            }
           }
-        });
-        
-        // Thêm số vào cuối thanh bằng canvas custom
-        setTimeout(() => addLabelsToHorizontalBar(values), 100);
-      }
-    }
-    
-    function addLabelsToHorizontalBar(values) {
-      const canvas = document.getElementById('horizontalBarChart');
-      if (!canvas) return;
-      
-      // Lưu số liệu để hiển thị
-      canvas.style.position = 'relative';
-      const maxValue = Math.max(...values);
-      
-      // Tạo tooltip hoặc overlay (Chart.js không hỗ trợ sẵn số cuối thanh ngang)
-      // Cách đơn giản: dùng plugin chartjs-plugin-datalabels nhưng để tránh phức tạp,
-      // ta dùng title attribute
-      const bars = document.querySelectorAll('#horizontalBarChart');
+        }
+      });
     }
     
     // ========== 4. REALTIME: THUỐC SẮP HẾT ==========
@@ -434,18 +433,6 @@
           }
         }
       });
-      
-      // Thêm số trên đỉnh cột
-      setTimeout(() => addDataLabels(values), 100);
-    }
-    
-    function addDataLabels(values) {
-      const canvas = document.getElementById('barChart');
-      if (!canvas) return;
-      
-      const bars = document.querySelectorAll('#barChart');
-      // Chart.js không hỗ trợ sẵn, dùng plugin đơn giản qua console
-      console.log('Số liệu doanh thu:', values.map(v => formatMoney(v)));
     }
     
     // ========== 6. SO SÁNH DOANH THU THÁNG NAY VS THÁNG TRƯỚC ==========
@@ -462,7 +449,6 @@
         prevYear--;
       }
       
-      // Lấy 4 tuần gần nhất
       const weeks = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'];
       const currentMonthData = [0, 0, 0, 0];
       const prevMonthData = [0, 0, 0, 0];
@@ -547,7 +533,7 @@
           scales: {
             y: {
               beginAtZero: true,
-              grid: { display: true, color: '#e0e0e0' },
+              grid: { display: false }, // ĐÃ BỎ GRIDLINE
               ticks: { font: { size: 9 }, callback: v => v.toLocaleString('vi-VN') }
             },
             x: {
@@ -686,7 +672,6 @@
       transition: transform 0.2s;
     }
 
-    /* Hàng 2: 2 biểu đồ */
     .row-2-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -720,7 +705,6 @@
       max-height: 180px;
     }
 
-    /* Hàng 3: Biểu đồ tròn + thanh ngang */
     .row-3-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -780,65 +764,6 @@
       width: 100%;
       flex: 1;
       min-height: 0;
-    }
-
-    .right-stack {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      min-height: 0;
-    }
-
-    .info-card {
-      background: white;
-      border-radius: 14px;
-      padding: 10px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-    }
-
-    .info-card h3 {
-      font-size: 13px;
-      margin-bottom: 6px;
-      color: #1a6d4c;
-      border-left: 3px solid #1a6d4c;
-      padding-left: 10px;
-      flex-shrink: 0;
-    }
-
-    .top-list {
-      list-style: none;
-      overflow-y: auto;
-      flex: 1;
-    }
-
-    .top-list li {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 5px 0;
-      border-bottom: 1px solid #e8f0ec;
-      font-size: 11px;
-    }
-
-    .top-list li:last-child {
-      border-bottom: none;
-    }
-
-    .staff-name {
-      font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 65%;
-    }
-
-    .staff-amount {
-      color: #1a6d4c;
-      font-weight: bold;
     }
 
     .bottom-row {
@@ -968,7 +893,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải...</td></tr>
+        <tr><td colspan="4">Đang tải......</td></tr>
       </tbody>
     </table>
   </div>
