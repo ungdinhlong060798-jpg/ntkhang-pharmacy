@@ -6,6 +6,7 @@
   <title>NTK.Hang Pharmacy - Dashboard</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
@@ -19,6 +20,9 @@
       limit,
       onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+    
+    // Đăng ký plugin datalabels
+    Chart.register(ChartDataLabels);
     
     // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
@@ -101,7 +105,6 @@
           if (order.status === 'cancelled') return;
           
           let employee = order.employee;
-          // Xử lý undefined, null, Unknown, rỗng
           if (!employee || employee === 'undefined' || employee === 'Unknown' || employee === '') {
             employee = 'Nhân viên';
           }
@@ -130,9 +133,7 @@
         pieChart = null;
       }
       
-      if (!staffData || staffData.length === 0) {
-        return;
-      }
+      if (!staffData || staffData.length === 0) return;
       
       const colors = ['#9b59b6', '#f1c40f', '#2a9d6e', '#e74c3c', '#3498db'];
       const labels = staffData.map(s => s.name);
@@ -226,9 +227,7 @@
         horizontalBarChart = null;
       }
       
-      if (!data || data.length === 0) {
-        return;
-      }
+      if (!data || data.length === 0) return;
       
       const labels = data.map(p => p.name);
       const values = data.map(p => p.sold);
@@ -252,6 +251,14 @@
           maintainAspectRatio: true,
           plugins: {
             legend: { display: false },
+            datalabels: {
+              anchor: 'end',
+              align: 'right',
+              offset: 4,
+              formatter: (value) => value,
+              font: { size: 10, weight: 'bold' },
+              color: '#1a5276'
+            },
             tooltip: {
               callbacks: {
                 label: function(context) {
@@ -323,14 +330,14 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
             </tbody>
           `;
         }
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY ==========
+    // ========== 5. DOANH THU 7 NGÀY (CÓ SỐ TRÊN CỘT) ==========
     async function loadRevenue7Days() {
       const labels = [];
       const revenues = [];
@@ -386,7 +393,15 @@
               backgroundColor: '#2a9d6e',
               borderRadius: 6,
               barPercentage: 0.6,
-              categoryPercentage: 0.7
+              categoryPercentage: 0.7,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 9, weight: 'bold' },
+                color: '#1a6d4c'
+              }
             },
             {
               label: '📈 Xu hướng',
@@ -399,13 +414,19 @@
               pointBorderColor: '#fff',
               pointBorderWidth: 1,
               fill: false,
-              tension: 0.3
+              tension: 0.3,
+              datalabels: { display: false }
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: true,
+          layout: {
+            padding: {
+              top: 20
+            }
+          },
           plugins: {
             legend: {
               position: 'top',
@@ -417,6 +438,9 @@
                   return `${context.dataset.label}: ${formatMoney(context.raw)}`;
                 }
               }
+            },
+            datalabels: {
+              display: true
             }
           },
           scales: {
@@ -505,7 +529,15 @@
               pointBackgroundColor: '#3498db',
               pointBorderColor: '#fff',
               tension: 0.3,
-              fill: true
+              fill: true,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 8 },
+                color: '#3498db'
+              }
             },
             {
               label: 'Tháng trước',
@@ -517,7 +549,15 @@
               pointBackgroundColor: '#e67e22',
               pointBorderColor: '#fff',
               tension: 0.3,
-              fill: true
+              fill: true,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 8 },
+                color: '#e67e22'
+              }
             }
           ]
         },
