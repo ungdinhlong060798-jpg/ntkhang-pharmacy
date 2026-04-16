@@ -6,7 +6,6 @@
   <title>NTK.Hang Pharmacy - Dashboard</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
@@ -20,9 +19,6 @@
       limit,
       onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
-    
-    // Đăng ký plugin datalabels
-    Chart.register(ChartDataLabels);
     
     // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
@@ -61,6 +57,7 @@
     let compareChart = null;
     let pieChart = null;
     let horizontalBarChart = null;
+    let currentHorizontalData = null;
     
     // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
@@ -216,6 +213,7 @@
         productsArray.sort((a, b) => b.sold - a.sold);
         const top5 = productsArray.slice(0, 5);
         
+        currentHorizontalData = top5;
         drawHorizontalBarChart(top5);
       });
     }
@@ -241,6 +239,7 @@
       
       const labels = data.map(p => p.name);
       const values = data.map(p => p.sold);
+      const maxValue = Math.max(...values, 1);
       
       horizontalBarChart = new Chart(ctx, {
         type: 'bar',
@@ -267,21 +266,14 @@
                   return `Số lượng: ${context.raw} cái`;
                 }
               }
-            },
-            datalabels: {
-              anchor: 'end',
-              align: 'right',
-              offset: 4,
-              formatter: (value) => value,
-              font: { size: 10, weight: 'bold' },
-              color: '#1a5276'
             }
           },
           scales: {
             x: {
               grid: { display: false },
               ticks: { font: { size: 9 } },
-              title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
+              title: { display: true, text: 'Số lượng bán', font: { size: 10 } },
+              max: maxValue + 1
             },
             y: {
               grid: { display: false },
@@ -290,6 +282,36 @@
           }
         }
       });
+      
+      // Sau khi chart được vẽ, thêm số vào cuối thanh
+      setTimeout(() => addLabelsToHorizontalBar(data), 150);
+    }
+    
+    function addLabelsToHorizontalBar(data) {
+      const canvas = document.getElementById('horizontalBarChart');
+      if (!canvas) return;
+      
+      const chart = horizontalBarChart;
+      if (!chart || !chart.scales || !chart.scales.x) return;
+      
+      const ctx = canvas.getContext('2d');
+      const xScale = chart.scales.x;
+      const yScale = chart.scales.y;
+      
+      ctx.save();
+      ctx.font = 'bold 10px "Segoe UI"';
+      ctx.fillStyle = '#1a5276';
+      ctx.shadowBlur = 0;
+      
+      data.forEach((item, index) => {
+        const value = item.sold;
+        const y = yScale.getPixelForValue(index);
+        const x = xScale.getPixelForValue(value);
+        
+        ctx.fillText(value.toString(), x + 5, y - 2);
+      });
+      
+      ctx.restore();
     }
     
     // ========== 4. REALTIME: THUỐC SẮP HẾT ==========
@@ -396,15 +418,7 @@
               backgroundColor: '#2a9d6e',
               borderRadius: 6,
               barPercentage: 0.6,
-              categoryPercentage: 0.7,
-              datalabels: {
-                anchor: 'end',
-                align: 'top',
-                offset: 4,
-                formatter: (value) => formatMoney(value),
-                font: { size: 9, weight: 'bold' },
-                color: '#1a6d4c'
-              }
+              categoryPercentage: 0.7
             },
             {
               label: '📈 Xu hướng',
@@ -419,8 +433,7 @@
               pointBorderWidth: 1,
               pointHoverRadius: 5,
               fill: false,
-              tension: 0.3,
-              datalabels: { display: false }
+              tension: 0.3
             }
           ]
         },
@@ -443,9 +456,6 @@
                   return `${context.dataset.label}: ${formatMoney(context.raw)}`;
                 }
               }
-            },
-            datalabels: {
-              display: true
             }
           },
           scales: {
@@ -461,6 +471,36 @@
           }
         }
       });
+      
+      // Thêm số trên đỉnh cột
+      setTimeout(() => addLabelsToBarChart(values), 150);
+    }
+    
+    function addLabelsToBarChart(values) {
+      const canvas = document.getElementById('barChart');
+      if (!canvas) return;
+      
+      const chart = barChart;
+      if (!chart || !chart.scales || !chart.scales.y) return;
+      
+      const ctx = canvas.getContext('2d');
+      const yScale = chart.scales.y;
+      const xScale = chart.scales.x;
+      
+      ctx.save();
+      ctx.font = 'bold 9px "Segoe UI"';
+      ctx.fillStyle = '#1a6d4c';
+      ctx.shadowBlur = 0;
+      
+      values.forEach((value, index) => {
+        if (value > 0) {
+          const x = xScale.getPixelForValue(index);
+          const y = yScale.getPixelForValue(value);
+          ctx.fillText(formatMoney(value), x - 15, y - 5);
+        }
+      });
+      
+      ctx.restore();
     }
     
     // ========== 6. SO SÁNH DOANH THU THÁNG NAY VS THÁNG TRƯỚC ==========
@@ -579,7 +619,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với số trên đỉnh cột');
+    console.log('🚀 Khởi động Dashboard');
     
     listenTodayStats();
     listenTopStaffAndPieChart();
