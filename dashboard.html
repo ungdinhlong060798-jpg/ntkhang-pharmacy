@@ -111,42 +111,32 @@
         staffArray.sort((a, b) => b.total - a.total);
         const top5 = staffArray.slice(0, 5);
         
-        // Cập nhật danh sách top nhân viên bên phải (nếu có)
-        const topStaffElement = document.getElementById('topStaff');
-        if (topStaffElement) {
-          if (top5.length > 0) {
-            topStaffElement.innerHTML = top5.map((s, idx) => `
-              <li>
-                <span class="staff-name">${idx + 1}. ${s.name}</span>
-                <span class="staff-amount">${formatMoney(s.total)}</span>
-              </li>
-            `).join('');
-          } else {
-            topStaffElement.innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-          }
+        // Cập nhật danh sách top nhân viên
+        if (top5.length > 0) {
+          document.getElementById('topStaff').innerHTML = top5.map((s, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${s.name}</span>
+              <span class="staff-amount">${formatMoney(s.total)}</span>
+            </li>
+          `).join('');
+        } else {
+          document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
         }
         
-        // Vẽ biểu đồ tròn
         drawPieChart(staffArray);
       });
     }
     
     function drawPieChart(staffData) {
       const canvas = document.getElementById('pieChart');
-      if (!canvas) {
-        console.error('Không tìm thấy canvas pieChart');
-        return;
-      }
+      if (!canvas) return;
       
       const ctx = canvas.getContext('2d');
-      
-      // Hủy chart cũ nếu tồn tại
       if (pieChart) {
         pieChart.destroy();
         pieChart = null;
       }
       
-      // Nếu không có dữ liệu
       if (!staffData || staffData.length === 0) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.font = '14px Arial';
@@ -156,60 +146,57 @@
         return;
       }
       
+      // Màu sắc cho từng nhân viên: Tím, Vàng, Xanh lục, Đỏ, Xanh dương
       const colors = ['#9b59b6', '#f1c40f', '#2a9d6e', '#e74c3c', '#3498db'];
       const labels = staffData.map(s => s.name);
       const values = staffData.map(s => s.total);
       const total = values.reduce((a, b) => a + b, 0);
       
-      try {
-        pieChart = new Chart(ctx, {
-          type: 'pie',
-          data: {
-            labels: labels,
-            datasets: [{
-              data: values,
-              backgroundColor: colors.slice(0, staffData.length),
-              borderWidth: 0,
-              hoverOffset: 8
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  font: { size: 10 },
-                  boxWidth: 10,
-                  generateLabels: function(chart) {
-                    const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                    original.forEach((label, i) => {
-                      const value = chart.data.datasets[0].data[i];
-                      const percent = ((value / total) * 100).toFixed(1);
-                      label.text = `${label.text}: ${percent}%`;
-                    });
-                    return original;
-                  }
-                }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    const label = context.label || '';
-                    const value = context.raw || 0;
+      pieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, staffData.length),
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 10 },
+                boxWidth: 12,
+                generateLabels: function(chart) {
+                  const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                  original.forEach((label, i) => {
+                    const value = chart.data.datasets[0].data[i];
                     const percent = ((value / total) * 100).toFixed(1);
-                    return `${label}: ${formatMoney(value)} (${percent}%)`;
-                  }
+                    // Định dạng: "Tên: X%"
+                    label.text = `${label.text}: ${percent}%`;
+                  });
+                  return original;
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.raw || 0;
+                  const percent = ((value / total) * 100).toFixed(1);
+                  return `${label}: ${formatMoney(value)} (${percent}%)`;
                 }
               }
             }
           }
-        });
-        console.log('Đã vẽ biểu đồ tròn với dữ liệu:', staffData);
-      } catch (error) {
-        console.error('Lỗi vẽ biểu đồ tròn:', error);
-      }
+        }
+      });
     }
     
     // ========== 3. REALTIME: TOP 5 SẢN PHẨM (BIỂU ĐỒ THANH NGANG) ==========
@@ -350,8 +337,7 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
-              </tr>
+              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
             </tbody>
           `;
         }
@@ -790,6 +776,7 @@
       min-height: 0;
     }
 
+    /* Bảng top nhân viên bên phải - đã bỏ vì chart tròn thay thế */
     .bottom-row {
       background: white;
       border-radius: 14px;
@@ -880,13 +867,13 @@
   <!-- Hàng 2: Biểu đồ cột 7 ngày + Biểu đồ so sánh tháng -->
   <div class="row-2-charts">
     <div class="chart-card">
-      <h3>📊 Doanh thu 7 ngày (cột + xu hướng)</h3>
+      <h3>📊 Doanh thu 7 ngày</h3>
       <div class="chart-container">
         <canvas id="barChart"></canvas>
       </div>
     </div>
     <div class="chart-card">
-      <h3>📈 So sánh doanh thu (Tháng này vs Tháng trước)</h3>
+      <h3>📈 So sánh doanh thu</h3>
       <div class="chart-container">
         <canvas id="compareChart"></canvas>
       </div>
@@ -902,7 +889,7 @@
       </div>
     </div>
     <div class="horizontal-card">
-      <h3>📊 Top 5 sản phẩm bán chạy (thanh ngang)</h3>
+      <h3>📊 Top 5 sản phẩm bán chạy</h3>
       <div class="horizontal-container">
         <canvas id="horizontalBarChart"></canvas>
       </div>
@@ -917,8 +904,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải...</td>
-        </tr>
+        <tr><td colspan="4">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
