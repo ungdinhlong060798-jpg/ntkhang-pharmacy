@@ -39,10 +39,23 @@
       return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
     }
     
-    // Lấy ngày từ datetime string "2026-04-11T15:14:46.353Z"
-    function getDateFromDatetime(datetimeStr) {
+    // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
+    function getTodayVN() {
+      const now = new Date();
+      const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      return vnDate.toISOString().split('T')[0];
+    }
+    
+    function getDateFromDatetimeVN(datetimeStr) {
       if (!datetimeStr) return null;
-      return datetimeStr.split('T')[0]; // "2026-04-11"
+      const utcDate = new Date(datetimeStr);
+      const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
+      return vnDate.toISOString().split('T')[0];
+    }
+    
+    function getDisplayDateVN(date) {
+      const vnDate = new Date(date.getTime() + (7 * 60 * 60 * 1000));
+      return `${(vnDate.getMonth()+1).toString().padStart(2,'0')}-${vnDate.getDate().toString().padStart(2,'0')}`;
     }
     
     let currentChart = null;
@@ -50,7 +63,7 @@
     // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
       const ordersRef = collection(db, 'orders');
-      const today = new Date().toISOString().split('T')[0];
+      const todayVN = getTodayVN();
       
       onSnapshot(ordersRef, (snapshot) => {
         let totalRevenue = 0;
@@ -58,10 +71,9 @@
         
         snapshot.forEach(doc => {
           const order = doc.data();
-          const orderDate = getDateFromDatetime(order.datetime);
+          const orderDate = getDateFromDatetimeVN(order.datetime);
           
-          // Chỉ tính đơn chưa cancelled và đúng ngày hôm nay
-          if (orderDate === today && order.status !== 'cancelled') {
+          if (orderDate === todayVN && order.status !== 'cancelled') {
             totalRevenue += order.total || 0;
             orderCount++;
           }
@@ -75,23 +87,21 @@
         revenueEl.style.transform = 'scale(1.02)';
         setTimeout(() => revenueEl.style.transform = 'scale(1)', 200);
         
-        console.log(`📊 Hôm nay: ${orderCount} đơn, ${formatMoney(totalRevenue)}`);
+        console.log(`📊 Hôm nay (VN): ${todayVN} - ${orderCount} đơn, ${formatMoney(totalRevenue)}`);
       }, (error) => {
         console.error('Lỗi lắng nghe orders:', error);
       });
     }
     
     // ========== 2. REALTIME: TOP 5 THUỐC BÁN CHẠY ==========
-    // Tính trực tiếp từ đơn hàng (chính xác 100%)
     function listenTopProducts() {
       const ordersRef = collection(db, 'orders');
       
       onSnapshot(ordersRef, (snapshot) => {
-        const productSales = {}; // { productName: quantity }
+        const productSales = {};
         
         snapshot.forEach(doc => {
           const order = doc.data();
-          // Bỏ qua đơn đã cancelled
           if (order.status === 'cancelled') return;
           
           const items = order.items || [];
@@ -107,7 +117,6 @@
           });
         });
         
-        // Chuyển thành mảng và sắp xếp
         const productsArray = Object.entries(productSales).map(([name, sold]) => ({ name, sold }));
         productsArray.sort((a, b) => b.sold - a.sold);
         const top5 = productsArray.slice(0, 5);
@@ -146,7 +155,6 @@
           }
         });
         
-        // Chuyển thành mảng và sắp xếp
         const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
         staffArray.sort((a, b) => b.total - a.total);
         const top5 = staffArray.slice(0, 5);
@@ -213,16 +221,18 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY ==========
+    // ========== 5. DOANH THU 7 NGÀY (THEO MÚI GIỜ VN) ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
       
       for (let i = 6; i >= 0; i--) {
-        const date = new Date();
-        date.setDate(date.getDate() - i);
-        const dateStr = date.toISOString().split('T')[0];
-        const displayDate = `${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+        const now = new Date();
+        const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+        vnNow.setDate(vnNow.getDate() - i);
+        
+        const dateStr = vnNow.toISOString().split('T')[0];
+        const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
         dates.push(displayDate);
         
         try {
@@ -232,7 +242,7 @@
           let dailyTotal = 0;
           snapshot.forEach(doc => {
             const order = doc.data();
-            const orderDate = getDateFromDatetime(order.datetime);
+            const orderDate = getDateFromDatetimeVN(order.datetime);
             if (orderDate === dateStr && order.status !== 'cancelled') {
               dailyTotal += order.total || 0;
             }
@@ -291,17 +301,19 @@
     
     function updateTimestamp() {
       const now = new Date();
-      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
+      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${vnNow.toLocaleString('vi-VN')}`;
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với collection: orders, products, staff');
+    console.log('🚀 Khởi động Dashboard (múi giờ VN UTC+7)');
+    console.log(`📅 Hôm nay theo VN: ${getTodayVN()}`);
     
-    listenTodayStats();   // Lắng nghe đơn hàng hôm nay
-    listenTopProducts();  // Lắng nghe top sản phẩm (tính từ orders)
-    listenTopStaff();     // Lắng nghe top nhân viên (tính từ orders)
-    listenLowStock();     // Lắng nghe hàng sắp hết (từ products)
-    loadRevenue7Days();   // Tải biểu đồ 7 ngày
+    listenTodayStats();
+    listenTopProducts();
+    listenTopStaff();
+    listenLowStock();
+    loadRevenue7Days();
     
     updateTimestamp();
     setInterval(updateTimestamp, 1000);
