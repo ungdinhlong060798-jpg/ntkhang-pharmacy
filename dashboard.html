@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
   <title>NTK.Hang Pharmacy - Dashboard</title>
 
+  <!-- Google Fonts đẹp hơn -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
@@ -53,7 +56,6 @@
       const isDark = document.body.classList.contains('dark-mode');
       localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
       document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
-      // Refresh charts để cập nhật màu sắc
       setTimeout(() => {
         loadRevenue7Days();
         loadCompareRevenue();
@@ -71,6 +73,14 @@
       if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'tr';
       if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k';
       return Math.round(amount).toLocaleString('vi-VN') + '₫';
+    }
+    
+    // Tạo gradient màu cho cột
+    function getBarGradient(ctx, chartArea, colorStart, colorEnd) {
+      const gradient = ctx.createLinearGradient(0, chartArea.bottom, 0, chartArea.top);
+      gradient.addColorStop(0, colorStart);
+      gradient.addColorStop(1, colorEnd);
+      return gradient;
     }
     
     // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
@@ -181,9 +191,8 @@
             legend: {
               position: 'bottom',
               labels: {
-                font: { size: 10 },
+                font: { size: 10, family: "'Inter', sans-serif" },
                 boxWidth: 12,
-                color: getComputedStyle(document.body).getPropertyValue('--text-color') || '#1a3a2e',
                 generateLabels: function(chart) {
                   const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
                   original.forEach((label, i) => {
@@ -264,7 +273,7 @@
             label: 'Số lượng bán',
             data: values,
             backgroundColor: '#1a5276',
-            borderRadius: 6,
+            borderRadius: 12,
             barPercentage: 0.7,
             categoryPercentage: 0.8
           }]
@@ -278,10 +287,13 @@
             datalabels: {
               anchor: 'end',
               align: 'right',
-              offset: 4,
+              offset: 6,
               formatter: (value) => value,
-              font: { size: 10, weight: 'bold' },
-              color: '#1a5276'
+              font: { size: 11, weight: 'bold', family: "'Inter', sans-serif" },
+              color: '#1a5276',
+              backgroundColor: 'rgba(255,255,255,0.8)',
+              borderRadius: 12,
+              padding: { left: 6, right: 6, top: 2, bottom: 2 }
             },
             tooltip: {
               callbacks: {
@@ -295,17 +307,17 @@
             x: {
               grid: { display: false },
               ticks: { 
-                font: { size: 9 },
+                font: { size: 10, family: "'Inter', sans-serif" },
                 stepSize: 1,
                 callback: function(val) {
                   return Number.isInteger(val) ? val : '';
                 }
               },
-              title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
+              title: { display: true, text: 'Số lượng bán', font: { size: 11, family: "'Inter', sans-serif" } }
             },
             y: {
               grid: { display: false },
-              ticks: { font: { size: 10 } }
+              ticks: { font: { size: 11, family: "'Inter', sans-serif" } }
             }
           }
         }
@@ -362,7 +374,7 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY ==========
+    // ========== 5. DOANH THU 7 NGÀY (DECOR CAO CẤP) ==========
     async function loadRevenue7Days() {
       const labels = [];
       const revenues = [];
@@ -415,17 +427,29 @@
               label: 'Doanh thu',
               type: 'bar',
               data: values,
-              backgroundColor: '#2a9d6e',
-              borderRadius: 6,
+              backgroundColor: (context) => {
+                const ctx = context.chart.ctx;
+                const chartArea = context.chart.chartArea;
+                if (!chartArea) return '#2a9d6e';
+                return getBarGradient(ctx, chartArea, '#1a6d4c', '#2a9d6e');
+              },
+              borderRadius: 12,
+              borderWidth: 2,
+              borderColor: 'rgba(255,255,255,0.3)',
               barPercentage: 0.6,
               categoryPercentage: 0.7,
               datalabels: {
                 anchor: 'end',
                 align: 'top',
-                offset: 4,
+                offset: 8,
                 formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 9, weight: 'bold' },
-                color: '#1a6d4c'
+                font: { size: 10, weight: 'bold', family: "'Inter', sans-serif" },
+                color: '#1a6d4c',
+                backgroundColor: 'rgba(255,255,255,0.9)',
+                borderRadius: 16,
+                padding: { left: 8, right: 8, top: 4, bottom: 4 },
+                borderWidth: 1,
+                borderColor: '#e0e0e0'
               }
             },
             {
@@ -433,11 +457,12 @@
               type: 'line',
               data: values,
               borderColor: '#e74c3c',
-              borderWidth: 2,
-              pointRadius: 3,
+              borderWidth: 3,
+              pointRadius: 5,
               pointBackgroundColor: '#e74c3c',
               pointBorderColor: '#fff',
-              pointBorderWidth: 1,
+              pointBorderWidth: 2,
+              pointHoverRadius: 8,
               fill: false,
               tension: 0.3,
               datalabels: { display: false }
@@ -448,12 +473,12 @@
           responsive: true,
           maintainAspectRatio: true,
           layout: {
-            padding: { top: 20 }
+            padding: { top: 30 }
           },
           plugins: {
             legend: {
               position: 'top',
-              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
+              labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true, boxWidth: 8 }
             },
             tooltip: {
               callbacks: {
@@ -469,7 +494,7 @@
               beginAtZero: true,
               grid: { display: false },
               ticks: { 
-                font: { size: 9 },
+                font: { size: 10, family: "'Inter', sans-serif" },
                 callback: function(value) {
                   return value.toLocaleString('vi-VN');
                 },
@@ -478,7 +503,7 @@
             },
             x: {
               grid: { display: false },
-              ticks: { font: { size: 9 } }
+              ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
             }
           }
         }
@@ -544,40 +569,50 @@
               label: 'Tháng này',
               data: currentData,
               borderColor: '#3498db',
-              backgroundColor: 'rgba(52, 152, 219, 0.1)',
-              borderWidth: 2,
-              pointRadius: 4,
+              backgroundColor: 'rgba(52, 152, 219, 0.05)',
+              borderWidth: 3,
+              pointRadius: 6,
               pointBackgroundColor: '#3498db',
               pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointHoverRadius: 10,
               tension: 0.3,
               fill: true,
               datalabels: {
                 anchor: 'end',
                 align: 'top',
-                offset: 4,
+                offset: 8,
                 formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 8 },
-                color: '#3498db'
+                font: { size: 9, weight: 'bold', family: "'Inter', sans-serif" },
+                color: '#3498db',
+                backgroundColor: 'rgba(255,255,255,0.85)',
+                borderRadius: 12,
+                padding: { left: 6, right: 6, top: 3, bottom: 3 }
               }
             },
             {
               label: 'Tháng trước',
               data: prevData,
               borderColor: '#e67e22',
-              backgroundColor: 'rgba(230, 126, 34, 0.1)',
-              borderWidth: 2,
-              pointRadius: 4,
+              backgroundColor: 'rgba(230, 126, 34, 0.05)',
+              borderWidth: 3,
+              pointRadius: 6,
               pointBackgroundColor: '#e67e22',
               pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointHoverRadius: 10,
               tension: 0.3,
               fill: true,
               datalabels: {
                 anchor: 'end',
                 align: 'top',
-                offset: 4,
+                offset: 8,
                 formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 8 },
-                color: '#e67e22'
+                font: { size: 9, weight: 'bold', family: "'Inter', sans-serif" },
+                color: '#e67e22',
+                backgroundColor: 'rgba(255,255,255,0.85)',
+                borderRadius: 12,
+                padding: { left: 6, right: 6, top: 3, bottom: 3 }
               }
             }
           ]
@@ -588,7 +623,7 @@
           plugins: {
             legend: {
               position: 'top',
-              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
+              labels: { font: { size: 10, family: "'Inter', sans-serif" }, usePointStyle: true, boxWidth: 8 }
             },
             tooltip: {
               callbacks: {
@@ -603,7 +638,7 @@
               beginAtZero: true,
               grid: { display: false },
               ticks: { 
-                font: { size: 9 },
+                font: { size: 10, family: "'Inter', sans-serif" },
                 callback: function(value) {
                   return value.toLocaleString('vi-VN');
                 },
@@ -612,7 +647,7 @@
             },
             x: {
               grid: { display: false },
-              ticks: { font: { size: 9 } }
+              ticks: { font: { size: 10, family: "'Inter', sans-serif" } }
             }
           }
         }
@@ -625,7 +660,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard');
+    console.log('🚀 Khởi động Dashboard với decor cao cấp');
     
     initDarkMode();
     document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
@@ -661,7 +696,8 @@
       --text-color: #1a3a2e;
       --border-color: #e8f0ec;
       --stat-number: #1a6d4c;
-      --shadow: 0 2px 8px rgba(0,0,0,0.05);
+      --shadow: 0 4px 20px rgba(0,0,0,0.08);
+      --shadow-hover: 0 8px 30px rgba(0,0,0,0.12);
     }
 
     /* Dark mode */
@@ -671,7 +707,8 @@
       --text-color: #e0e0e0;
       --border-color: #2d2d44;
       --stat-number: #6ab04c;
-      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+      --shadow: 0 4px 20px rgba(0,0,0,0.3);
+      --shadow-hover: 0 8px 30px rgba(0,0,0,0.4);
     }
 
     html, body {
@@ -683,9 +720,9 @@
     }
 
     body {
-      font-family: 'Segoe UI', Arial, sans-serif;
+      font-family: 'Inter', 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif;
       color: var(--text-color);
-      padding: 10px;
+      padding: 12px;
       height: 100vh;
       display: flex;
       flex-direction: column;
@@ -697,14 +734,14 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 12px;
       height: 100%;
       overflow-y: auto;
       padding-right: 4px;
     }
     
     .dashboard::-webkit-scrollbar {
-      width: 5px;
+      width: 6px;
     }
     .dashboard::-webkit-scrollbar-track {
       background: var(--border-color);
@@ -724,63 +761,70 @@
     }
     h1 {
       text-align: center;
-      font-size: 20px;
+      font-size: 22px;
       color: var(--stat-number);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 10px;
       flex: 1;
+      font-weight: 700;
     }
     .dark-mode-btn {
       background: var(--card-bg);
       border: none;
-      font-size: 20px;
+      font-size: 22px;
       cursor: pointer;
-      padding: 6px 12px;
-      border-radius: 30px;
+      padding: 8px 14px;
+      border-radius: 40px;
       box-shadow: var(--shadow);
-      transition: transform 0.2s;
+      transition: all 0.2s ease;
     }
     .dark-mode-btn:hover {
       transform: scale(1.05);
+      box-shadow: var(--shadow-hover);
     }
 
     .realtime-badge {
-      background: #2a9d6e;
+      background: linear-gradient(135deg, #2a9d6e, #1a6d4c);
       color: white;
-      font-size: 9px;
-      padding: 2px 8px;
-      border-radius: 20px;
+      font-size: 10px;
+      padding: 3px 10px;
+      border-radius: 30px;
       animation: pulse 2s infinite;
+      font-weight: 600;
     }
 
     @keyframes pulse {
-      0% { opacity: 0.6; }
-      50% { opacity: 1; }
-      100% { opacity: 0.6; }
+      0% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0.4); }
+      50% { opacity: 1; box-shadow: 0 0 0 4px rgba(42, 157, 110, 0); }
+      100% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0); }
     }
 
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
     }
 
     .stat-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px 8px;
+      border-radius: 20px;
+      padding: 14px 12px;
       box-shadow: var(--shadow);
       text-align: center;
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-hover);
     }
 
     .stat-card h3 {
-      font-size: 13px;
+      font-size: 14px;
       color: #5a6e66;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
       font-weight: 500;
     }
     body.dark-mode .stat-card h3 {
@@ -788,8 +832,8 @@
     }
 
     .stat-number {
-      font-size: 26px;
-      font-weight: bold;
+      font-size: 30px;
+      font-weight: 800;
       color: var(--stat-number);
       transition: transform 0.2s;
     }
@@ -797,63 +841,71 @@
     .row-2-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
     }
 
     .chart-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 20px;
+      padding: 12px;
       box-shadow: var(--shadow);
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+    }
+    .chart-card:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .chart-card h3 {
-      font-size: 13px;
-      margin-bottom: 6px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: var(--stat-number);
-      padding-left: 6px;
+      padding-left: 8px;
+      font-weight: 600;
     }
 
     .chart-container {
       width: 100%;
       height: auto;
-      min-height: 180px;
+      min-height: 190px;
     }
 
     canvas {
       max-width: 100%;
       height: auto !important;
-      max-height: 180px;
+      max-height: 190px;
     }
 
     .row-3-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       flex: 1;
       min-height: 0;
     }
 
     .pie-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 20px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       min-height: 0;
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+    }
+    .pie-card:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .pie-card h3 {
-      font-size: 13px;
-      margin-bottom: 6px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: var(--stat-number);
-      border-left: 3px solid var(--stat-number);
-      padding-left: 10px;
+      border-left: 4px solid var(--stat-number);
+      padding-left: 12px;
       flex-shrink: 0;
+      font-weight: 600;
     }
 
     .pie-container {
@@ -867,22 +919,26 @@
 
     .horizontal-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 20px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       min-height: 0;
-      transition: background 0.3s ease;
+      transition: all 0.3s ease;
+    }
+    .horizontal-card:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .horizontal-card h3 {
-      font-size: 13px;
-      margin-bottom: 6px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: var(--stat-number);
-      border-left: 3px solid var(--stat-number);
-      padding-left: 10px;
+      border-left: 4px solid var(--stat-number);
+      padding-left: 12px;
       flex-shrink: 0;
+      font-weight: 600;
     }
 
     .horizontal-container {
@@ -893,21 +949,25 @@
 
     .bottom-row {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 20px;
+      padding: 12px;
       box-shadow: var(--shadow);
       overflow-x: auto;
       flex-shrink: 0;
-      max-height: 140px;
-      transition: background 0.3s ease;
+      max-height: 150px;
+      transition: all 0.3s ease;
+    }
+    .bottom-row:hover {
+      box-shadow: var(--shadow-hover);
     }
 
     .bottom-row h3 {
-      font-size: 13px;
-      margin-bottom: 6px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: var(--stat-number);
-      border-left: 3px solid var(--stat-number);
-      padding-left: 10px;
+      border-left: 4px solid var(--stat-number);
+      padding-left: 12px;
+      font-weight: 600;
     }
 
     table {
@@ -917,10 +977,10 @@
     }
 
     th, td {
-      padding: 5px 6px;
+      padding: 8px 8px;
       text-align: left;
       border-bottom: 1px solid var(--border-color);
-      font-size: 11px;
+      font-size: 12px;
       color: var(--text-color);
     }
 
@@ -942,22 +1002,24 @@
 
     .update-time {
       text-align: center;
-      margin-top: 4px;
+      margin-top: 6px;
       color: #8aa99e;
-      font-size: 10px;
+      font-size: 11px;
       flex-shrink: 0;
     }
 
     @media (max-width: 900px) {
-      .row-2-charts, .row-3-charts { grid-template-columns: 1fr; gap: 8px; }
-      .stat-number { font-size: 22px; }
+      body { padding: 8px; }
+      .row-2-charts, .row-3-charts { grid-template-columns: 1fr; gap: 10px; }
+      .stat-number { font-size: 24px; }
+      h1 { font-size: 18px; }
     }
     
     @media (min-width: 1400px) {
-      .stat-number { font-size: 32px; }
-      .chart-container { min-height: 220px; }
-      canvas { max-height: 220px; }
-      .bottom-row { max-height: 160px; }
+      .stat-number { font-size: 36px; }
+      .chart-container { min-height: 240px; }
+      canvas { max-height: 240px; }
+      .bottom-row { max-height: 170px; }
     }
   </style>
 </head>
@@ -1020,8 +1082,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải...</td>
-        </tr>
+        <tr><td colspan="4">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
