@@ -162,7 +162,7 @@
           document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
         }
         
-        // Vẽ biểu đồ tròn
+        // Vẽ biểu đồ tròn với % và màu Tím & Vàng
         drawPieChart(staffArray);
       });
     }
@@ -171,14 +171,14 @@
       const ctx = document.getElementById('pieChart').getContext('2d');
       if (pieChart) pieChart.destroy();
       
-      // Màu sắc cho biểu đồ tròn
+      // Màu sắc cho biểu đồ tròn: Xanh lục, Đỏ, Xanh dương, TÍM, VÀNG, Cam, Hồng
       const colors = [
-        '#2a9d6e', '#e74c3c', '#3498db', '#f39c12', '#9b59b6',
-        '#1abc9c', '#e67e22', '#2c3e50', '#16a085', '#c0392b'
+        '#2a9d6e', '#e74c3c', '#3498db', '#9b59b6', '#f1c40f', '#e67e22', '#1abc9c'
       ];
       
       const labels = staffData.map(s => s.name);
       const values = staffData.map(s => s.total);
+      const total = values.reduce((a, b) => a + b, 0);
       
       if (staffData.length > 0) {
         pieChart = new Chart(ctx, {
@@ -199,9 +199,18 @@
               legend: {
                 position: 'bottom',
                 labels: {
-                  font: { size: 11 },
-                  boxWidth: 12,
-                  padding: 8
+                  font: { size: 10 },
+                  boxWidth: 10,
+                  padding: 6,
+                  generateLabels: function(chart) {
+                    const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                    original.forEach((label, i) => {
+                      const value = chart.data.datasets[0].data[i];
+                      const percent = ((value / total) * 100).toFixed(1);
+                      label.text = `${label.text}: ${percent}%`;
+                    });
+                    return original;
+                  }
                 }
               },
               tooltip: {
@@ -209,7 +218,6 @@
                   label: function(context) {
                     const label = context.label || '';
                     const value = context.raw || 0;
-                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
                     const percent = ((value / total) * 100).toFixed(1);
                     return `${label}: ${formatMoney(value)} (${percent}%)`;
                   }
@@ -219,7 +227,6 @@
           }
         });
       } else {
-        // Hiển thị thông báo khi không có dữ liệu
         ctx.font = '14px Arial';
         ctx.fillStyle = '#999';
         ctx.textAlign = 'center';
@@ -276,7 +283,7 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (BIỂU ĐỒ CỘT) ==========
+    // ========== 5. DOANH THU 7 NGÀY (BIỂU ĐỒ CỘT + ĐƯỜNG TREND) ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
@@ -308,10 +315,10 @@
         }
       }
       
-      drawBarChart(dates, revenues);
+      drawBarChartWithTrend(dates, revenues);
     }
     
-    function drawBarChart(labels, values) {
+    function drawBarChartWithTrend(labels, values) {
       const ctx = document.getElementById('barChart').getContext('2d');
       if (barChart) barChart.destroy();
       
@@ -319,23 +326,53 @@
         type: 'bar',
         data: {
           labels: labels,
-          datasets: [{
-            label: 'Doanh thu',
-            data: values,
-            backgroundColor: '#2a9d6e',
-            borderRadius: 6,
-            barPercentage: 0.7
-          }]
+          datasets: [
+            {
+              label: 'Doanh thu',
+              type: 'bar',
+              data: values,
+              backgroundColor: '#2a9d6e',
+              borderRadius: 6,
+              barPercentage: 0.6,
+              categoryPercentage: 0.7,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Xu hướng',
+              type: 'line',
+              data: values,
+              borderColor: '#e74c3c',
+              backgroundColor: 'rgba(231, 76, 60, 0.1)',
+              borderWidth: 3,
+              pointRadius: 4,
+              pointBackgroundColor: '#e74c3c',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointHoverRadius: 6,
+              fill: false,
+              tension: 0.3,
+              yAxisID: 'y'
+            }
+          ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: true,
           plugins: {
-            legend: { display: false },
+            legend: {
+              position: 'top',
+              labels: {
+                font: { size: 11 },
+                usePointStyle: true,
+                boxWidth: 8
+              }
+            },
             tooltip: {
               callbacks: {
                 label: function(context) {
-                  return formatMoney(context.raw);
+                  let label = context.dataset.label || '';
+                  let value = context.raw || 0;
+                  return `${label}: ${formatMoney(value)}`;
                 }
               }
             }
@@ -346,7 +383,21 @@
               ticks: {
                 callback: function(value) {
                   return value.toLocaleString('vi-VN');
-                }
+                },
+                font: { size: 10 }
+              },
+              title: {
+                display: true,
+                text: 'Doanh thu (VNĐ)',
+                font: { size: 11 }
+              }
+            },
+            x: {
+              ticks: { font: { size: 10 } },
+              title: {
+                display: true,
+                text: 'Ngày',
+                font: { size: 11 }
               }
             }
           }
@@ -360,7 +411,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với biểu đồ tròn');
+    console.log('🚀 Khởi động Dashboard với biểu đồ tròn + đường trend');
     
     listenTodayStats();
     listenTopProducts();
@@ -384,48 +435,65 @@
       box-sizing: border-box;
     }
 
-    html {
+    html, body {
       width: 100%;
       height: 100%;
-      overflow-x: auto;
+      overflow: hidden;
     }
 
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
       background: #f0f7f3;
       color: #1a3a2e;
-      width: 100%;
-      min-height: 100vh;
-      padding: 16px;
-      overflow-x: auto;
+      padding: 12px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
     }
 
     .dashboard {
       width: 100%;
       max-width: 1600px;
-      min-width: 320px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 10px;
+      height: 100%;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    
+    /* Tùy chỉnh scrollbar */
+    .dashboard::-webkit-scrollbar {
+      width: 6px;
+    }
+    .dashboard::-webkit-scrollbar-track {
+      background: #e0e8e4;
+      border-radius: 10px;
+    }
+    .dashboard::-webkit-scrollbar-thumb {
+      background: #2a9d6e;
+      border-radius: 10px;
     }
 
     h1 {
       text-align: center;
-      font-size: clamp(20px, 5vw, 28px);
+      font-size: 22px;
       color: #1a6d4c;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 10px;
       flex-wrap: wrap;
+      margin: 0;
+      padding: 0;
     }
 
     .realtime-badge {
       background: #2a9d6e;
       color: white;
-      font-size: 12px;
-      padding: 4px 12px;
+      font-size: 10px;
+      padding: 3px 10px;
       border-radius: 20px;
       animation: pulse 2s infinite;
     }
@@ -440,107 +508,107 @@
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 20px;
+      gap: 12px;
     }
 
     .stat-card {
       background: white;
-      border-radius: 24px;
-      padding: 20px 16px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      border-radius: 16px;
+      padding: 12px 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
       text-align: center;
     }
 
     .stat-card h3 {
-      font-size: clamp(14px, 3vw, 18px);
+      font-size: 14px;
       color: #5a6e66;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       font-weight: 500;
     }
 
     .stat-number {
-      font-size: clamp(28px, 6vw, 48px);
+      font-size: 28px;
       font-weight: bold;
       color: #1a6d4c;
       transition: transform 0.2s;
     }
 
-    /* Hàng 2: Biểu đồ cột (full chiều ngang) */
+    /* Hàng 2: Biểu đồ cột */
     .full-width {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
     }
 
     .full-width h3 {
-      font-size: clamp(14px, 3vw, 18px);
-      margin-bottom: 16px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: #1a6d4c;
-      padding-left: 8px;
+      padding-left: 6px;
     }
 
     .chart-container {
       width: 100%;
       height: auto;
-      min-height: 260px;
+      min-height: 200px;
     }
 
     canvas {
       max-width: 100%;
       height: auto !important;
-      max-height: 280px;
+      max-height: 200px;
     }
 
     /* Hàng 3: Biểu đồ tròn + 2 box top */
     .middle-row {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
+      gap: 12px;
     }
 
     .pie-card {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
     }
 
     .pie-card h3 {
-      font-size: clamp(14px, 3vw, 18px);
-      margin-bottom: 16px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: #1a6d4c;
-      border-left: 4px solid #1a6d4c;
-      padding-left: 12px;
+      border-left: 3px solid #1a6d4c;
+      padding-left: 10px;
     }
 
     .pie-container {
       width: 100%;
-      max-width: 300px;
+      max-width: 240px;
       margin: 0 auto;
-      min-height: 260px;
+      min-height: 200px;
     }
 
     .right-stack {
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 12px;
     }
 
     .info-card {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
       flex: 1;
     }
 
     .info-card h3 {
-      font-size: clamp(14px, 3vw, 18px);
-      margin-bottom: 16px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: #1a6d4c;
-      border-left: 4px solid #1a6d4c;
-      padding-left: 12px;
+      border-left: 3px solid #1a6d4c;
+      padding-left: 10px;
     }
 
     .top-list {
@@ -551,9 +619,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 0;
+      padding: 6px 0;
       border-bottom: 1px solid #e8f0ec;
-      font-size: clamp(12px, 2.5vw, 14px);
+      font-size: 12px;
     }
 
     .top-list li:last-child {
@@ -576,18 +644,18 @@
     /* Hàng 4: Bảng hàng sắp hết */
     .bottom-row {
       background: white;
-      border-radius: 24px;
-      padding: 20px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
       overflow-x: auto;
     }
 
     .bottom-row h3 {
-      font-size: clamp(14px, 3vw, 18px);
-      margin-bottom: 16px;
+      font-size: 14px;
+      margin-bottom: 8px;
       color: #1a6d4c;
-      border-left: 4px solid #1a6d4c;
-      padding-left: 12px;
+      border-left: 3px solid #1a6d4c;
+      padding-left: 10px;
     }
 
     table {
@@ -597,10 +665,10 @@
     }
 
     th, td {
-      padding: 12px 10px;
+      padding: 8px 8px;
       text-align: left;
       border-bottom: 1px solid #e8f0ec;
-      font-size: clamp(12px, 2.5vw, 14px);
+      font-size: 12px;
     }
 
     th {
@@ -621,23 +689,24 @@
 
     .update-time {
       text-align: center;
-      margin-top: 8px;
+      margin-top: 6px;
       color: #8aa99e;
-      font-size: 12px;
+      font-size: 10px;
     }
 
-    /* Responsive */
-    @media (max-width: 900px) {
-      body { padding: 12px; }
-      .middle-row { grid-template-columns: 1fr; gap: 16px; }
-      .pie-container { max-width: 250px; }
+    /* Responsive cho màn hình nhỏ */
+    @media (max-width: 800px) {
+      body { padding: 8px; }
+      .middle-row { grid-template-columns: 1fr; gap: 10px; }
+      .stat-number { font-size: 24px; }
+      .pie-container { max-width: 200px; }
     }
-
+    
     @media (min-width: 1400px) {
-      .dashboard { max-width: 1800px; }
-      .stat-number { font-size: 54px; }
-      .chart-container { min-height: 320px; }
-      .pie-container { min-height: 320px; }
+      .stat-number { font-size: 36px; }
+      .chart-container { min-height: 240px; }
+      canvas { max-height: 240px; }
+      .pie-container { max-width: 280px; min-height: 240px; }
     }
   </style>
 </head>
@@ -660,9 +729,9 @@
     </div>
   </div>
 
-  <!-- Hàng 2: Biểu đồ cột doanh thu 7 ngày (full chiều ngang) -->
+  <!-- Hàng 2: Biểu đồ cột doanh thu 7 ngày + đường trend -->
   <div class="full-width">
-    <h3>📊 Biểu đồ doanh thu 7 ngày gần nhất</h3>
+    <h3>📊 Biểu đồ doanh thu 7 ngày (cột + xu hướng)</h3>
     <div class="chart-container">
       <canvas id="barChart"></canvas>
     </div>
