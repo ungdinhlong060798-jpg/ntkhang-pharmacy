@@ -358,7 +358,7 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
+              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
               </tr>
             </tbody>
           `;
@@ -628,7 +628,7 @@
       const labels = [];
       const orders = [];
       
-      // 5 ngày gần nhất (i chạy từ 4 đến 0)
+      // 5 ngày gần nhất
       for (let i = 4; i >= 0; i--) {
         const now = new Date();
         const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
@@ -733,7 +733,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với layout mới');
+    console.log('🚀 Khởi động Dashboard');
     
     initDarkMode();
     document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
@@ -796,7 +796,7 @@
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
       color: var(--text-color);
-      padding: 10px;
+      padding: 0;
       height: 100vh;
       display: flex;
       flex-direction: column;
@@ -804,14 +804,15 @@
 
     .dashboard {
       width: 100%;
-      max-width: 1600px;
-      margin: 0 auto;
+      max-width: 100%;
+      margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       height: 100%;
       overflow-y: auto;
-      padding-right: 4px;
+      padding: 12px;
+      box-sizing: border-box;
     }
     
     .dashboard::-webkit-scrollbar {
@@ -876,14 +877,14 @@
     .top-row-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
     }
 
     .stat-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px 8px;
+      border-radius: 16px;
+      padding: 12px 8px;
       box-shadow: var(--shadow);
       text-align: center;
       transition: background 0.3s ease;
@@ -919,49 +920,49 @@
     .row-2-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
     }
 
     .chart-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       transition: background 0.3s ease;
     }
 
     .chart-card h3 {
       font-size: 13px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: var(--stat-number);
       padding-left: 6px;
     }
 
     .chart-container {
-  width: 100%;
-  height: auto;
-  min-height: 180px;
-}
+      width: 100%;
+      height: auto;
+      min-height: 200px;
+    }
 
-canvas {
-  width: 100% !important;
-  height: auto !important;
-  max-height: 180px;
-}
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+      max-height: 200px;
+    }
 
     .row-3-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       flex: 1;
       min-height: 0;
     }
 
     .left-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
@@ -971,7 +972,7 @@ canvas {
 
     .left-card h3 {
       font-size: 13px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: var(--stat-number);
       border-left: 3px solid var(--stat-number);
       padding-left: 10px;
@@ -986,8 +987,8 @@ canvas {
 
     .right-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
@@ -997,7 +998,7 @@ canvas {
 
     .right-card h3 {
       font-size: 13px;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
       color: var(--stat-number);
       border-left: 3px solid var(--stat-number);
       padding-left: 10px;
@@ -1014,15 +1015,15 @@ canvas {
     .bottom-row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       flex-shrink: 0;
-      min-height: 180px;
+      min-height: 200px;
     }
 
     .staff-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
@@ -1067,8 +1068,8 @@ canvas {
 
     .lowstock-card {
       background: var(--card-bg);
-      border-radius: 14px;
-      padding: 10px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
@@ -1096,7 +1097,7 @@ canvas {
     }
 
     th, td {
-      padding: 5px 6px;
+      padding: 6px 8px;
       text-align: left;
       border-bottom: 1px solid var(--border-color);
       font-size: 11px;
@@ -1121,24 +1122,26 @@ canvas {
 
     .update-time {
       text-align: center;
-      margin-top: 4px;
+      margin-top: 6px;
       color: #8aa99e;
       font-size: 10px;
       flex-shrink: 0;
     }
 
     @media (max-width: 900px) {
-      .row-2-charts, .row-3-charts, .bottom-row-2 { grid-template-columns: 1fr; gap: 8px; }
-      .stat-number { font-size: 18px; }
-      .top-row-3 { gap: 6px; }
-      .stat-card { padding: 8px 4px; }
+      .row-2-charts, .row-3-charts, .bottom-row-2 { grid-template-columns: 1fr; gap: 10px; }
+      .stat-number { font-size: 20px; }
+      .top-row-3 { gap: 8px; }
+      .stat-card { padding: 10px 6px; }
       .stat-card h3 { font-size: 11px; }
+      .dashboard { padding: 8px; gap: 8px; }
     }
     
     @media (min-width: 1400px) {
       .stat-number { font-size: 28px; }
-      .chart-container { min-height: 220px; }
-      canvas { max-height: 220px; }
+      .chart-container { min-height: 240px; }
+      canvas { max-height: 240px; }
+      .dashboard { padding: 16px; gap: 14px; }
     }
   </style>
 </head>
@@ -1188,10 +1191,10 @@ canvas {
     </div>
   </div>
 
-  <!-- Hàng 3: Số đơn theo ngày (5 ngày) + Top 5 sản phẩm -->
+  <!-- Hàng 3: Số đơn theo ngày + Top 5 sản phẩm -->
   <div class="row-3-charts">
     <div class="left-card">
-      <h3>📊 Số đơn hàng theo ngày </h3>
+      <h3>📊 Số đơn hàng theo ngày</h3>
       <div class="left-container">
         <canvas id="dailyOrdersChart"></canvas>
       </div>
