@@ -6,6 +6,7 @@
   <title>NTK.Hang Pharmacy - Dashboard</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
@@ -19,6 +20,9 @@
       limit,
       onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+    
+    // Đăng ký plugin datalabels
+    Chart.register(ChartDataLabels);
     
     // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
@@ -51,12 +55,6 @@
       const utcDate = new Date(datetimeStr);
       const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
       return vnDate.toISOString().split('T')[0];
-    }
-    
-    // Lấy ngày theo định dạng DD-MM cho hiển thị (dựa trên giờ VN)
-    function getDisplayDateVN(date) {
-      const vnDate = new Date(date.getTime() + (7 * 60 * 60 * 1000));
-      return `${(vnDate.getMonth()+1).toString().padStart(2,'0')}-${vnDate.getDate().toString().padStart(2,'0')}`;
     }
     
     let barChart = null;
@@ -269,6 +267,14 @@
                   return `Số lượng: ${context.raw} cái`;
                 }
               }
+            },
+            datalabels: {
+              anchor: 'end',
+              align: 'right',
+              offset: 4,
+              formatter: (value) => value,
+              font: { size: 10, weight: 'bold' },
+              color: '#1a5276'
             }
           },
           scales: {
@@ -336,23 +342,19 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (ĐÃ SỬA LỖI MÚI GIỜ) ==========
+    // ========== 5. DOANH THU 7 NGÀY (CÓ SỐ TRÊN ĐỈNH CỘT) ==========
     async function loadRevenue7Days() {
       const labels = [];
       const revenues = [];
       
-      // Lấy 7 ngày gần nhất tính từ hôm nay (theo giờ VN)
       for (let i = 6; i >= 0; i--) {
         const now = new Date();
-        // Tạo ngày theo giờ VN
         const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
         vnNow.setDate(vnNow.getDate() - i);
         
-        // Format hiển thị: MM-DD
         const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
         labels.push(displayDate);
         
-        // Format để so sánh với order: YYYY-MM-DD
         const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
         
         try {
@@ -394,7 +396,15 @@
               backgroundColor: '#2a9d6e',
               borderRadius: 6,
               barPercentage: 0.6,
-              categoryPercentage: 0.7
+              categoryPercentage: 0.7,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => formatMoney(value),
+                font: { size: 9, weight: 'bold' },
+                color: '#1a6d4c'
+              }
             },
             {
               label: '📈 Xu hướng',
@@ -409,13 +419,19 @@
               pointBorderWidth: 1,
               pointHoverRadius: 5,
               fill: false,
-              tension: 0.3
+              tension: 0.3,
+              datalabels: { display: false }
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: true,
+          layout: {
+            padding: {
+              top: 20
+            }
+          },
           plugins: {
             legend: {
               position: 'top',
@@ -427,6 +443,9 @@
                   return `${context.dataset.label}: ${formatMoney(context.raw)}`;
                 }
               }
+            },
+            datalabels: {
+              display: true
             }
           },
           scales: {
@@ -560,7 +579,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard');
+    console.log('🚀 Khởi động Dashboard với số trên đỉnh cột');
     
     listenTodayStats();
     listenTopStaffAndPieChart();
@@ -850,7 +869,6 @@
     <span class="realtime-badge">🔴 LIVE</span>
   </h1>
 
-  <!-- Hàng 1: Doanh thu + Số đơn -->
   <div class="top-row">
     <div class="stat-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
@@ -862,7 +880,6 @@
     </div>
   </div>
 
-  <!-- Hàng 2: Biểu đồ cột 7 ngày + Biểu đồ so sánh tháng -->
   <div class="row-2-charts">
     <div class="chart-card">
       <h3>📊 Doanh thu 7 ngày</h3>
@@ -878,7 +895,6 @@
     </div>
   </div>
 
-  <!-- Hàng 3: Biểu đồ tròn + Biểu đồ thanh ngang Top sản phẩm -->
   <div class="row-3-charts">
     <div class="pie-card">
       <h3>🥧 Doanh thu theo nhân viên</h3>
@@ -894,7 +910,6 @@
     </div>
   </div>
 
-  <!-- Hàng 4: Bảng thuốc sắp hết -->
   <div class="bottom-row">
     <h3>⚠️ Thuốc sắp hết hàng (tồn kho &lt; 10)</h3>
     <table id="lowStockTable">
