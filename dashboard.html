@@ -86,10 +86,6 @@
         
         document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
         document.getElementById('todayOrders').innerHTML = orderCount.toLocaleString('vi-VN');
-        
-        const revenueEl = document.getElementById('todayRevenue');
-        revenueEl.style.transform = 'scale(1.02)';
-        setTimeout(() => revenueEl.style.transform = 'scale(1)', 200);
       });
     }
     
@@ -104,8 +100,9 @@
           const order = doc.data();
           if (order.status === 'cancelled') return;
           
-          let employee = order.employee || 'Nhân viên';
-          if (employee === 'undefined' || employee === 'Unknown') {
+          let employee = order.employee;
+          // Xử lý undefined, null, Unknown, rỗng
+          if (!employee || employee === 'undefined' || employee === 'Unknown' || employee === '') {
             employee = 'Nhân viên';
           }
           const total = order.total || 0;
@@ -128,18 +125,12 @@
       const canvas = document.getElementById('pieChart');
       if (!canvas) return;
       
-      const ctx = canvas.getContext('2d');
       if (pieChart) {
         pieChart.destroy();
         pieChart = null;
       }
       
       if (!staffData || staffData.length === 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '14px Arial';
-        ctx.fillStyle = '#999';
-        ctx.textAlign = 'center';
-        ctx.fillText('Chưa có dữ liệu', canvas.width / 2, canvas.height / 2);
         return;
       }
       
@@ -148,7 +139,7 @@
       const values = staffData.map(s => s.total);
       const total = values.reduce((a, b) => a + b, 0);
       
-      pieChart = new Chart(ctx, {
+      pieChart = new Chart(canvas, {
         type: 'pie',
         data: {
           labels: labels,
@@ -230,25 +221,19 @@
       const canvas = document.getElementById('horizontalBarChart');
       if (!canvas) return;
       
-      const ctx = canvas.getContext('2d');
       if (horizontalBarChart) {
         horizontalBarChart.destroy();
         horizontalBarChart = null;
       }
       
       if (!data || data.length === 0) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '14px Arial';
-        ctx.fillStyle = '#999';
-        ctx.textAlign = 'center';
-        ctx.fillText('Chưa có dữ liệu', canvas.width / 2, canvas.height / 2);
         return;
       }
       
       const labels = data.map(p => p.name);
       const values = data.map(p => p.sold);
       
-      horizontalBarChart = new Chart(ctx, {
+      horizontalBarChart = new Chart(canvas, {
         type: 'bar',
         data: {
           labels: labels,
@@ -281,7 +266,9 @@
               ticks: { 
                 font: { size: 9 },
                 stepSize: 1,
-                max: Math.max(...values, 1) + 1
+                callback: function(val) {
+                  return Number.isInteger(val) ? val : '';
+                }
               },
               title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
             },
@@ -336,8 +323,7 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
-              </tr>
+              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
             </tbody>
           `;
         }
@@ -383,12 +369,12 @@
     }
     
     function drawBarChartWithTrend(labels, values) {
-      const ctx = document.getElementById('barChart').getContext('2d');
+      const canvas = document.getElementById('barChart');
+      if (!canvas) return;
+      
       if (barChart) barChart.destroy();
       
-      const maxValue = Math.max(...values, 1000);
-      
-      barChart = new Chart(ctx, {
+      barChart = new Chart(canvas, {
         type: 'bar',
         data: {
           labels: labels,
@@ -407,13 +393,11 @@
               type: 'line',
               data: values,
               borderColor: '#e74c3c',
-              backgroundColor: 'rgba(231, 76, 60, 0.05)',
               borderWidth: 2,
               pointRadius: 3,
               pointBackgroundColor: '#e74c3c',
               pointBorderColor: '#fff',
               pointBorderWidth: 1,
-              pointHoverRadius: 5,
               fill: false,
               tension: 0.3
             }
@@ -444,7 +428,7 @@
                 callback: function(value) {
                   return value.toLocaleString('vi-VN');
                 },
-                maxTicksLimit: 6  // Giới hạn chỉ hiển thị tối đa 6 số trên trục Y
+                maxTicksLimit: 6
               }
             },
             x: {
@@ -501,10 +485,12 @@
     }
     
     function drawCompareChart(labels, currentData, prevData) {
-      const ctx = document.getElementById('compareChart').getContext('2d');
+      const canvas = document.getElementById('compareChart');
+      if (!canvas) return;
+      
       if (compareChart) compareChart.destroy();
       
-      compareChart = new Chart(ctx, {
+      compareChart = new Chart(canvas, {
         type: 'line',
         data: {
           labels: labels,
@@ -916,8 +902,7 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải...</td>
-        </tr>
+        <tr><td colspan="4">Đang tải...</td></tr>
       </tbody>
     </table>
   </div>
