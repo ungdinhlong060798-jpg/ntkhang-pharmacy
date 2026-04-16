@@ -299,11 +299,10 @@
       });
     }
     
-    function updateTimestamp() {
-      const now = new Date();
-      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${vnNow.toLocaleString('vi-VN')}`;
-    }
+   function updateTimestamp() {
+  const now = new Date();
+  document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
+}
     
     // ========== KHỞI ĐỘNG ==========
     console.log('🚀 Khởi động Dashboard (múi giờ VN UTC+7)');
