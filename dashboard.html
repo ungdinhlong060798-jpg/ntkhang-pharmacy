@@ -53,12 +53,8 @@
       return vnDate.toISOString().split('T')[0];
     }
     
-    function getDisplayDateVN(date) {
-      const vnDate = new Date(date.getTime() + (7 * 60 * 60 * 1000));
-      return `${(vnDate.getMonth()+1).toString().padStart(2,'0')}-${vnDate.getDate().toString().padStart(2,'0')}`;
-    }
-    
-    let currentChart = null;
+    let barChart = null;
+    let pieChart = null;
     
     // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
     function listenTodayStats() {
@@ -82,14 +78,9 @@
         document.getElementById('todayRevenue').innerHTML = formatMoney(totalRevenue);
         document.getElementById('todayOrders').innerHTML = orderCount.toLocaleString('vi-VN');
         
-        // Hiệu ứng flash khi có thay đổi
         const revenueEl = document.getElementById('todayRevenue');
         revenueEl.style.transform = 'scale(1.02)';
         setTimeout(() => revenueEl.style.transform = 'scale(1)', 200);
-        
-        console.log(`📊 Hôm nay (VN): ${todayVN} - ${orderCount} đơn, ${formatMoney(totalRevenue)}`);
-      }, (error) => {
-        console.error('Lỗi lắng nghe orders:', error);
       });
     }
     
@@ -134,8 +125,8 @@
       });
     }
     
-    // ========== 3. REALTIME: TOP NHÂN VIÊN ==========
-    function listenTopStaff() {
+    // ========== 3. REALTIME: TOP NHÂN VIÊN & BIỂU ĐỒ TRÒN ==========
+    function listenTopStaffAndPieChart() {
       const ordersRef = collection(db, 'orders');
       
       onSnapshot(ordersRef, (snapshot) => {
@@ -159,6 +150,7 @@
         staffArray.sort((a, b) => b.total - a.total);
         const top5 = staffArray.slice(0, 5);
         
+        // Cập nhật danh sách top nhân viên
         if (top5.length > 0) {
           document.getElementById('topStaff').innerHTML = top5.map((s, idx) => `
             <li>
@@ -169,10 +161,73 @@
         } else {
           document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
         }
+        
+        // Vẽ biểu đồ tròn
+        drawPieChart(staffArray);
       });
     }
     
-    // ========== 4. REALTIME: THUỐC SẮP HẾT (stock < 10) ==========
+    function drawPieChart(staffData) {
+      const ctx = document.getElementById('pieChart').getContext('2d');
+      if (pieChart) pieChart.destroy();
+      
+      // Màu sắc cho biểu đồ tròn
+      const colors = [
+        '#2a9d6e', '#e74c3c', '#3498db', '#f39c12', '#9b59b6',
+        '#1abc9c', '#e67e22', '#2c3e50', '#16a085', '#c0392b'
+      ];
+      
+      const labels = staffData.map(s => s.name);
+      const values = staffData.map(s => s.total);
+      
+      if (staffData.length > 0) {
+        pieChart = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colors.slice(0, staffData.length),
+              borderWidth: 0,
+              hoverOffset: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  font: { size: 11 },
+                  boxWidth: 12,
+                  padding: 8
+                }
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const label = context.label || '';
+                    const value = context.raw || 0;
+                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                    const percent = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${formatMoney(value)} (${percent}%)`;
+                  }
+                }
+              }
+            }
+          }
+        });
+      } else {
+        // Hiển thị thông báo khi không có dữ liệu
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#999';
+        ctx.textAlign = 'center';
+        ctx.fillText('Chưa có dữ liệu', ctx.canvas.width / 2, ctx.canvas.height / 2);
+      }
+    }
+    
+    // ========== 4. REALTIME: THUỐC SẮP HẾT ==========
     function listenLowStock() {
       const productsRef = collection(db, 'products');
       
@@ -221,7 +276,7 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (THEO MÚI GIỜ VN) ==========
+    // ========== 5. DOANH THU 7 NGÀY (BIỂU ĐỒ CỘT) ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
@@ -253,14 +308,14 @@
         }
       }
       
-      drawChart(dates, revenues);
+      drawBarChart(dates, revenues);
     }
     
-    function drawChart(labels, values) {
-      const ctx = document.getElementById('revenueChart').getContext('2d');
-      if (currentChart) currentChart.destroy();
+    function drawBarChart(labels, values) {
+      const ctx = document.getElementById('barChart').getContext('2d');
+      if (barChart) barChart.destroy();
       
-      currentChart = new Chart(ctx, {
+      barChart = new Chart(ctx, {
         type: 'bar',
         data: {
           labels: labels,
@@ -299,25 +354,23 @@
       });
     }
     
-   function updateTimestamp() {
-  const now = new Date();
-  document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
-}
+    function updateTimestamp() {
+      const now = new Date();
+      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
+    }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard (múi giờ VN UTC+7)');
-    console.log(`📅 Hôm nay theo VN: ${getTodayVN()}`);
+    console.log('🚀 Khởi động Dashboard với biểu đồ tròn');
     
     listenTodayStats();
     listenTopProducts();
-    listenTopStaff();
+    listenTopStaffAndPieChart();
     listenLowStock();
     loadRevenue7Days();
     
     updateTimestamp();
     setInterval(updateTimestamp, 1000);
     
-    // Refresh biểu đồ khi có đơn hàng mới
     const ordersRef = collection(db, 'orders');
     onSnapshot(ordersRef, () => {
       loadRevenue7Days();
@@ -349,30 +402,30 @@
 
     .dashboard {
       width: 100%;
-      max-width: 1400px;
+      max-width: 1600px;
       min-width: 320px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
     h1 {
       text-align: center;
-      font-size: clamp(18px, 5vw, 26px);
+      font-size: clamp(20px, 5vw, 28px);
       color: #1a6d4c;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
     .realtime-badge {
       background: #2a9d6e;
       color: white;
-      font-size: 11px;
-      padding: 3px 10px;
+      font-size: 12px;
+      padding: 4px 12px;
       border-radius: 20px;
       animation: pulse 2s infinite;
     }
@@ -383,89 +436,111 @@
       100% { opacity: 0.6; }
     }
 
+    /* Hàng 1: 2 ô doanh thu */
     .top-row {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
+      gap: 20px;
     }
 
     .stat-card {
       background: white;
-      border-radius: 20px;
-      padding: 16px 12px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-radius: 24px;
+      padding: 20px 16px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
       text-align: center;
     }
 
     .stat-card h3 {
-      font-size: clamp(12px, 3vw, 16px);
+      font-size: clamp(14px, 3vw, 18px);
       color: #5a6e66;
       margin-bottom: 8px;
       font-weight: 500;
     }
 
     .stat-number {
-      font-size: clamp(24px, 6vw, 42px);
+      font-size: clamp(28px, 6vw, 48px);
       font-weight: bold;
       color: #1a6d4c;
       transition: transform 0.2s;
     }
 
-    .middle-row {
-      display: grid;
-      grid-template-columns: 1.5fr 1fr;
-      gap: 16px;
-    }
-
-    .chart-card {
+    /* Hàng 2: Biểu đồ cột (full chiều ngang) */
+    .full-width {
       background: white;
-      border-radius: 20px;
-      padding: 14px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
     }
 
-    .chart-card h3 {
-      font-size: clamp(12px, 3vw, 16px);
-      margin-bottom: 10px;
+    .full-width h3 {
+      font-size: clamp(14px, 3vw, 18px);
+      margin-bottom: 16px;
       color: #1a6d4c;
-      padding-left: 6px;
+      padding-left: 8px;
     }
 
     .chart-container {
       width: 100%;
       height: auto;
-      min-height: 220px;
+      min-height: 260px;
     }
 
     canvas {
       max-width: 100%;
       height: auto !important;
-      max-height: 260px;
+      max-height: 280px;
+    }
+
+    /* Hàng 3: Biểu đồ tròn + 2 box top */
+    .middle-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .pie-card {
+      background: white;
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
+    }
+
+    .pie-card h3 {
+      font-size: clamp(14px, 3vw, 18px);
+      margin-bottom: 16px;
+      color: #1a6d4c;
+      border-left: 4px solid #1a6d4c;
+      padding-left: 12px;
+    }
+
+    .pie-container {
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+      min-height: 260px;
     }
 
     .right-stack {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 20px;
     }
 
     .info-card {
       background: white;
-      border-radius: 20px;
-      padding: 14px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
       flex: 1;
     }
 
     .info-card h3 {
-      font-size: clamp(12px, 3vw, 16px);
-      margin-bottom: 10px;
+      font-size: clamp(14px, 3vw, 18px);
+      margin-bottom: 16px;
       color: #1a6d4c;
-      border-left: 3px solid #1a6d4c;
-      padding-left: 10px;
+      border-left: 4px solid #1a6d4c;
+      padding-left: 12px;
     }
 
     .top-list {
@@ -476,9 +551,9 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 8px 0;
+      padding: 10px 0;
       border-bottom: 1px solid #e8f0ec;
-      font-size: clamp(11px, 2.5vw, 14px);
+      font-size: clamp(12px, 2.5vw, 14px);
     }
 
     .top-list li:last-child {
@@ -498,20 +573,21 @@
       font-weight: bold;
     }
 
+    /* Hàng 4: Bảng hàng sắp hết */
     .bottom-row {
       background: white;
-      border-radius: 20px;
-      padding: 14px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
       overflow-x: auto;
     }
 
     .bottom-row h3 {
-      font-size: clamp(12px, 3vw, 16px);
-      margin-bottom: 12px;
+      font-size: clamp(14px, 3vw, 18px);
+      margin-bottom: 16px;
       color: #1a6d4c;
-      border-left: 3px solid #1a6d4c;
-      padding-left: 10px;
+      border-left: 4px solid #1a6d4c;
+      padding-left: 12px;
     }
 
     table {
@@ -521,10 +597,10 @@
     }
 
     th, td {
-      padding: 8px 6px;
+      padding: 12px 10px;
       text-align: left;
       border-bottom: 1px solid #e8f0ec;
-      font-size: clamp(11px, 2.5vw, 13px);
+      font-size: clamp(12px, 2.5vw, 14px);
     }
 
     th {
@@ -547,19 +623,21 @@
       text-align: center;
       margin-top: 8px;
       color: #8aa99e;
-      font-size: 11px;
+      font-size: 12px;
     }
 
-    @media (max-width: 768px) {
+    /* Responsive */
+    @media (max-width: 900px) {
       body { padding: 12px; }
-      .middle-row { grid-template-columns: 1fr; gap: 12px; }
-      .chart-container { min-height: 200px; }
+      .middle-row { grid-template-columns: 1fr; gap: 16px; }
+      .pie-container { max-width: 250px; }
     }
 
     @media (min-width: 1400px) {
-      .dashboard { max-width: 1600px; }
-      .stat-number { font-size: 48px; }
-      .chart-container { min-height: 300px; }
+      .dashboard { max-width: 1800px; }
+      .stat-number { font-size: 54px; }
+      .chart-container { min-height: 320px; }
+      .pie-container { min-height: 320px; }
     }
   </style>
 </head>
@@ -570,6 +648,7 @@
     <span class="realtime-badge">🔴 LIVE</span>
   </h1>
 
+  <!-- Hàng 1: Doanh thu hôm nay + Tổng số đơn hôm nay -->
   <div class="top-row">
     <div class="stat-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
@@ -581,14 +660,25 @@
     </div>
   </div>
 
+  <!-- Hàng 2: Biểu đồ cột doanh thu 7 ngày (full chiều ngang) -->
+  <div class="full-width">
+    <h3>📊 Biểu đồ doanh thu 7 ngày gần nhất</h3>
+    <div class="chart-container">
+      <canvas id="barChart"></canvas>
+    </div>
+  </div>
+
+  <!-- Hàng 3: Biểu đồ tròn + Top 5 thuốc + Top nhân viên -->
   <div class="middle-row">
-    <div class="chart-card">
-      <h3>📊 Biểu đồ doanh thu 7 ngày gần nhất</h3>
-      <div class="chart-container">
-        <canvas id="revenueChart"></canvas>
+    <!-- Biểu đồ tròn -->
+    <div class="pie-card">
+      <h3>🥧 Doanh thu theo nhân viên</h3>
+      <div class="pie-container">
+        <canvas id="pieChart"></canvas>
       </div>
     </div>
 
+    <!-- 2 box top bên phải -->
     <div class="right-stack">
       <div class="info-card">
         <h3>🏆 Top 5 thuốc bán chạy</h3>
@@ -605,6 +695,7 @@
     </div>
   </div>
 
+  <!-- Hàng 4: Bảng thuốc sắp hết -->
   <div class="bottom-row">
     <h3>⚠️ Thuốc sắp hết hàng (tồn kho &lt; 10)</h3>
     <table id="lowStockTable">
