@@ -111,35 +111,48 @@
         staffArray.sort((a, b) => b.total - a.total);
         const top5 = staffArray.slice(0, 5);
         
-        // Cập nhật danh sách top nhân viên bên phải
-        if (top5.length > 0) {
-          document.getElementById('topStaff').innerHTML = top5.map((s, idx) => `
-            <li>
-              <span class="staff-name">${idx + 1}. ${s.name}</span>
-              <span class="staff-amount">${formatMoney(s.total)}</span>
-            </li>
-          `).join('');
-        } else {
-          document.getElementById('topStaff').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+        // Cập nhật danh sách top nhân viên bên phải (nếu có)
+        const topStaffElement = document.getElementById('topStaff');
+        if (topStaffElement) {
+          if (top5.length > 0) {
+            topStaffElement.innerHTML = top5.map((s, idx) => `
+              <li>
+                <span class="staff-name">${idx + 1}. ${s.name}</span>
+                <span class="staff-amount">${formatMoney(s.total)}</span>
+              </li>
+            `).join('');
+          } else {
+            topStaffElement.innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+          }
         }
         
-        // Vẽ lại biểu đồ tròn
+        // Vẽ biểu đồ tròn
         drawPieChart(staffArray);
       });
     }
     
     function drawPieChart(staffData) {
-      const ctx = document.getElementById('pieChart').getContext('2d');
-      if (pieChart) {
-        pieChart.destroy();
+      const canvas = document.getElementById('pieChart');
+      if (!canvas) {
+        console.error('Không tìm thấy canvas pieChart');
+        return;
       }
       
+      const ctx = canvas.getContext('2d');
+      
+      // Hủy chart cũ nếu tồn tại
+      if (pieChart) {
+        pieChart.destroy();
+        pieChart = null;
+      }
+      
+      // Nếu không có dữ liệu
       if (!staffData || staffData.length === 0) {
-        // Hiển thị thông báo khi không có dữ liệu
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.font = '14px Arial';
         ctx.fillStyle = '#999';
         ctx.textAlign = 'center';
-        ctx.fillText('Chưa có dữ liệu', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        ctx.fillText('Chưa có dữ liệu', canvas.width / 2, canvas.height / 2);
         return;
       }
       
@@ -148,50 +161,55 @@
       const values = staffData.map(s => s.total);
       const total = values.reduce((a, b) => a + b, 0);
       
-      pieChart = new Chart(ctx, {
-        type: 'pie',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: values,
-            backgroundColor: colors.slice(0, staffData.length),
-            borderWidth: 0,
-            hoverOffset: 8
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: {
-                font: { size: 10 },
-                boxWidth: 10,
-                generateLabels: function(chart) {
-                  const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                  original.forEach((label, i) => {
-                    const value = chart.data.datasets[0].data[i];
-                    const percent = ((value / total) * 100).toFixed(1);
-                    label.text = `${label.text}: ${percent}%`;
-                  });
-                  return original;
+      try {
+        pieChart = new Chart(ctx, {
+          type: 'pie',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              backgroundColor: colors.slice(0, staffData.length),
+              borderWidth: 0,
+              hoverOffset: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: {
+                  font: { size: 10 },
+                  boxWidth: 10,
+                  generateLabels: function(chart) {
+                    const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                    original.forEach((label, i) => {
+                      const value = chart.data.datasets[0].data[i];
+                      const percent = ((value / total) * 100).toFixed(1);
+                      label.text = `${label.text}: ${percent}%`;
+                    });
+                    return original;
+                  }
                 }
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const label = context.label || '';
-                  const value = context.raw || 0;
-                  const percent = ((value / total) * 100).toFixed(1);
-                  return `${label}: ${formatMoney(value)} (${percent}%)`;
+              },
+              tooltip: {
+                callbacks: {
+                  label: function(context) {
+                    const label = context.label || '';
+                    const value = context.raw || 0;
+                    const percent = ((value / total) * 100).toFixed(1);
+                    return `${label}: ${formatMoney(value)} (${percent}%)`;
+                  }
                 }
               }
             }
           }
-        }
-      });
+        });
+        console.log('Đã vẽ biểu đồ tròn với dữ liệu:', staffData);
+      } catch (error) {
+        console.error('Lỗi vẽ biểu đồ tròn:', error);
+      }
     }
     
     // ========== 3. REALTIME: TOP 5 SẢN PHẨM (BIỂU ĐỒ THANH NGANG) ==========
@@ -227,14 +245,21 @@
     }
     
     function drawHorizontalBarChart(data) {
-      const ctx = document.getElementById('horizontalBarChart').getContext('2d');
-      if (horizontalBarChart) horizontalBarChart.destroy();
+      const canvas = document.getElementById('horizontalBarChart');
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (horizontalBarChart) {
+        horizontalBarChart.destroy();
+        horizontalBarChart = null;
+      }
       
       if (!data || data.length === 0) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.font = '14px Arial';
         ctx.fillStyle = '#999';
         ctx.textAlign = 'center';
-        ctx.fillText('Chưa có dữ liệu', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        ctx.fillText('Chưa có dữ liệu', canvas.width / 2, canvas.height / 2);
         return;
       }
       
@@ -325,14 +350,15 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
+              </tr>
             </tbody>
           `;
         }
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (CỘT + TREND + SỐ TRÊN ĐỈNH) ==========
+    // ========== 5. DOANH THU 7 NGÀY (CỘT + TREND) ==========
     async function loadRevenue7Days() {
       const dates = [];
       const revenues = [];
@@ -383,8 +409,7 @@
               backgroundColor: '#2a9d6e',
               borderRadius: 6,
               barPercentage: 0.6,
-              categoryPercentage: 0.7,
-              yAxisID: 'y'
+              categoryPercentage: 0.7
             },
             {
               label: '📈 Xu hướng',
@@ -399,8 +424,7 @@
               pointBorderWidth: 1,
               pointHoverRadius: 5,
               fill: false,
-              tension: 0.3,
-              yAxisID: 'y'
+              tension: 0.3
             }
           ]
         },
@@ -533,7 +557,7 @@
           scales: {
             y: {
               beginAtZero: true,
-              grid: { display: false }, // ĐÃ BỎ GRIDLINE
+              grid: { display: false },
               ticks: { font: { size: 9 }, callback: v => v.toLocaleString('vi-VN') }
             },
             x: {
@@ -551,7 +575,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard đầy đủ tính năng');
+    console.log('🚀 Khởi động Dashboard');
     
     listenTodayStats();
     listenTopStaffAndPieChart();
@@ -893,7 +917,8 @@
         <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
       </thead>
       <tbody>
-        <tr><td colspan="4">Đang tải......</td></tr>
+        <tr><td colspan="4">Đang tải...</td>
+        </tr>
       </tbody>
     </table>
   </div>
