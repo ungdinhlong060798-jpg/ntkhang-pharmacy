@@ -53,6 +53,12 @@
       return vnDate.toISOString().split('T')[0];
     }
     
+    // Lấy ngày theo định dạng DD-MM cho hiển thị (dựa trên giờ VN)
+    function getDisplayDateVN(date) {
+      const vnDate = new Date(date.getTime() + (7 * 60 * 60 * 1000));
+      return `${(vnDate.getMonth()+1).toString().padStart(2,'0')}-${vnDate.getDate().toString().padStart(2,'0')}`;
+    }
+    
     let barChart = null;
     let compareChart = null;
     let pieChart = null;
@@ -110,27 +116,20 @@
         const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
         staffArray.sort((a, b) => b.total - a.total);
         
-        // Vẽ biểu đồ tròn
         drawPieChart(staffArray);
       });
     }
     
     function drawPieChart(staffData) {
       const canvas = document.getElementById('pieChart');
-      if (!canvas) {
-        console.error('Không tìm thấy canvas pieChart');
-        return;
-      }
+      if (!canvas) return;
       
       const ctx = canvas.getContext('2d');
-      
-      // Hủy chart cũ nếu tồn tại
       if (pieChart) {
         pieChart.destroy();
         pieChart = null;
       }
       
-      // Nếu không có dữ liệu
       if (!staffData || staffData.length === 0) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.font = '14px Arial';
@@ -140,61 +139,55 @@
         return;
       }
       
-      // Màu sắc cho từng nhân viên: Tím, Vàng, Xanh lục, Đỏ, Xanh dương
       const colors = ['#9b59b6', '#f1c40f', '#2a9d6e', '#e74c3c', '#3498db'];
       const labels = staffData.map(s => s.name);
       const values = staffData.map(s => s.total);
       const total = values.reduce((a, b) => a + b, 0);
       
-      try {
-        pieChart = new Chart(ctx, {
-          type: 'pie',
-          data: {
-            labels: labels,
-            datasets: [{
-              data: values,
-              backgroundColor: colors.slice(0, staffData.length),
-              borderWidth: 0,
-              hoverOffset: 8
-            }]
-          },
-          options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-              legend: {
-                position: 'bottom',
-                labels: {
-                  font: { size: 10 },
-                  boxWidth: 12,
-                  generateLabels: function(chart) {
-                    const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                    original.forEach((label, i) => {
-                      const value = chart.data.datasets[0].data[i];
-                      const percent = ((value / total) * 100).toFixed(1);
-                      label.text = `${label.text}: ${percent}%`;
-                    });
-                    return original;
-                  }
-                }
-              },
-              tooltip: {
-                callbacks: {
-                  label: function(context) {
-                    const label = context.label || '';
-                    const value = context.raw || 0;
+      pieChart = new Chart(ctx, {
+        type: 'pie',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: values,
+            backgroundColor: colors.slice(0, staffData.length),
+            borderWidth: 0,
+            hoverOffset: 8
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                font: { size: 10 },
+                boxWidth: 12,
+                generateLabels: function(chart) {
+                  const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                  original.forEach((label, i) => {
+                    const value = chart.data.datasets[0].data[i];
                     const percent = ((value / total) * 100).toFixed(1);
-                    return `${label}: ${formatMoney(value)} (${percent}%)`;
-                  }
+                    label.text = `${label.text}: ${percent}%`;
+                  });
+                  return original;
+                }
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  const label = context.label || '';
+                  const value = context.raw || 0;
+                  const percent = ((value / total) * 100).toFixed(1);
+                  return `${label}: ${formatMoney(value)} (${percent}%)`;
                 }
               }
             }
           }
-        });
-        console.log('Đã vẽ biểu đồ tròn với dữ liệu:', staffData);
-      } catch (error) {
-        console.error('Lỗi vẽ biểu đồ tròn:', error);
-      }
+        }
+      });
     }
     
     // ========== 3. REALTIME: TOP 5 SẢN PHẨM (BIỂU ĐỒ THANH NGANG) ==========
@@ -343,19 +336,24 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (CỘT + TREND) ==========
+    // ========== 5. DOANH THU 7 NGÀY (ĐÃ SỬA LỖI MÚI GIỜ) ==========
     async function loadRevenue7Days() {
-      const dates = [];
+      const labels = [];
       const revenues = [];
       
+      // Lấy 7 ngày gần nhất tính từ hôm nay (theo giờ VN)
       for (let i = 6; i >= 0; i--) {
         const now = new Date();
+        // Tạo ngày theo giờ VN
         const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
         vnNow.setDate(vnNow.getDate() - i);
         
-        const dateStr = vnNow.toISOString().split('T')[0];
+        // Format hiển thị: MM-DD
         const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
-        dates.push(displayDate);
+        labels.push(displayDate);
+        
+        // Format để so sánh với order: YYYY-MM-DD
+        const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
         
         try {
           const ordersRef = collection(db, 'orders');
@@ -364,8 +362,10 @@
           let dailyTotal = 0;
           snapshot.forEach(doc => {
             const order = doc.data();
+            if (order.status === 'cancelled') return;
+            
             const orderDate = getDateFromDatetimeVN(order.datetime);
-            if (orderDate === dateStr && order.status !== 'cancelled') {
+            if (orderDate === dateStr) {
               dailyTotal += order.total || 0;
             }
           });
@@ -375,7 +375,7 @@
         }
       }
       
-      drawBarChartWithTrend(dates, revenues);
+      drawBarChartWithTrend(labels, revenues);
     }
     
     function drawBarChartWithTrend(labels, values) {
