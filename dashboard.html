@@ -6,7 +6,6 @@
   <title>NTK.Hang Pharmacy - Dashboard</title>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
@@ -20,9 +19,6 @@
       limit,
       onSnapshot
     } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
-    
-    // Đăng ký plugin datalabels
-    Chart.register(ChartDataLabels);
     
     // ========== FIREBASE CONFIG ==========
     const firebaseConfig = {
@@ -41,6 +37,12 @@
     function formatMoney(amount) {
       if (!amount && amount !== 0) return '0 ₫';
       return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
+    }
+    
+    // Format số ngắn cho biểu đồ tròn
+    function formatMoneyShort(amount) {
+      if (!amount && amount !== 0) return '0₫';
+      return Math.round(amount).toLocaleString('vi-VN') + '₫';
     }
     
     // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
@@ -101,7 +103,11 @@
           const order = doc.data();
           if (order.status === 'cancelled') return;
           
-          const employee = order.employee || 'Unknown';
+          // Xử lý lỗi undefined - thay bằng "Nhân viên"
+          let employee = order.employee || 'Nhân viên';
+          if (employee === 'undefined' || employee === 'Unknown') {
+            employee = 'Nhân viên';
+          }
           const total = order.total || 0;
           
           if (staffSales[employee]) {
@@ -113,6 +119,21 @@
         
         const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
         staffArray.sort((a, b) => b.total - a.total);
+        
+        // Cập nhật danh sách top nhân viên (nếu có)
+        const topStaffElement = document.getElementById('topStaff');
+        if (topStaffElement) {
+          if (staffArray.length > 0) {
+            topStaffElement.innerHTML = staffArray.slice(0, 5).map((s, idx) => `
+              <li>
+                <span class="staff-name">${idx + 1}. ${s.name}</span>
+                <span class="staff-amount">${formatMoney(s.total)}</span>
+              </li>
+            `).join('');
+          } else {
+            topStaffElement.innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+          }
+        }
         
         drawPieChart(staffArray);
       });
@@ -167,7 +188,9 @@
                   original.forEach((label, i) => {
                     const value = chart.data.datasets[0].data[i];
                     const percent = ((value / total) * 100).toFixed(1);
-                    label.text = `${label.text}: ${percent}%`;
+                    // Format số tiền ngắn gọn (VD: 360k thay vì 360000)
+                    const formattedValue = formatMoneyShort(value);
+                    label.text = `${label.text}: ${formattedValue} (${percent}%)`;
                   });
                   return original;
                 }
@@ -267,14 +290,6 @@
                   return `Số lượng: ${context.raw} cái`;
                 }
               }
-            },
-            datalabels: {
-              anchor: 'end',
-              align: 'right',
-              offset: 4,
-              formatter: (value) => value,
-              font: { size: 10, weight: 'bold' },
-              color: '#1a5276'
             }
           },
           scales: {
@@ -342,7 +357,7 @@
       });
     }
     
-    // ========== 5. DOANH THU 7 NGÀY (CÓ SỐ TRÊN ĐỈNH CỘT) ==========
+    // ========== 5. DOANH THU 7 NGÀY (CỘT + TREND - BỎ SỐ 0) ==========
     async function loadRevenue7Days() {
       const labels = [];
       const revenues = [];
@@ -396,15 +411,7 @@
               backgroundColor: '#2a9d6e',
               borderRadius: 6,
               barPercentage: 0.6,
-              categoryPercentage: 0.7,
-              datalabels: {
-                anchor: 'end',
-                align: 'top',
-                offset: 4,
-                formatter: (value) => formatMoney(value),
-                font: { size: 9, weight: 'bold' },
-                color: '#1a6d4c'
-              }
+              categoryPercentage: 0.7
             },
             {
               label: '📈 Xu hướng',
@@ -419,19 +426,13 @@
               pointBorderWidth: 1,
               pointHoverRadius: 5,
               fill: false,
-              tension: 0.3,
-              datalabels: { display: false }
+              tension: 0.3
             }
           ]
         },
         options: {
           responsive: true,
           maintainAspectRatio: true,
-          layout: {
-            padding: {
-              top: 20
-            }
-          },
           plugins: {
             legend: {
               position: 'top',
@@ -443,9 +444,6 @@
                   return `${context.dataset.label}: ${formatMoney(context.raw)}`;
                 }
               }
-            },
-            datalabels: {
-              display: true
             }
           },
           scales: {
@@ -579,7 +577,7 @@
     }
     
     // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard với số trên đỉnh cột');
+    console.log('🚀 Khởi động Dashboard');
     
     listenTodayStats();
     listenTopStaffAndPieChart();
