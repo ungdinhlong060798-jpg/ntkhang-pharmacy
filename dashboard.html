@@ -104,9 +104,8 @@
     let compareChart = null;
     let dailyOrdersChart = null;
     let horizontalBarChart = null;
-    let staffPieChart = null;
     
-    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY ==========
+    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY (có % tăng trưởng) ==========
     function listenTodayStats() {
       const ordersRef = collection(db, 'orders');
       const todayVN = getTodayVN();
@@ -134,11 +133,13 @@
           }
         });
         
+        // Cập nhật doanh thu hôm nay
         const revenueGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
         document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
         document.getElementById('revenueGrowth').innerHTML = `${revenueGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revenueGrowth)}% vs hôm qua`;
         document.getElementById('revenueGrowth').style.color = revenueGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
         
+        // Cập nhật số đơn hôm nay
         const orderGrowth = calculateGrowth(todayOrders, yesterdayOrders);
         document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
         document.getElementById('orderGrowth').innerHTML = `${orderGrowth >= 0 ? '▲' : '▼'} ${Math.abs(orderGrowth)}%`;
@@ -172,7 +173,7 @@
       });
     }
     
-    // ========== 3. REALTIME: TOP NHÂN VIÊN (CHART TRÒN + DANH SÁCH) ==========
+    // ========== 3. REALTIME: TOP NHÂN VIÊN BÁN TỐT ==========
     function listenTopStaff() {
       const ordersRef = collection(db, 'orders');
       
@@ -200,7 +201,6 @@
         staffArray.sort((a, b) => b.total - a.total);
         const topStaff = staffArray.slice(0, 5);
         
-        // Cập nhật danh sách top nhân viên (bên phải chart tròn)
         if (topStaff.length > 0) {
           document.getElementById('topStaffList').innerHTML = topStaff.map((staff, idx) => `
             <li>
@@ -210,80 +210,6 @@
           `).join('');
         } else {
           document.getElementById('topStaffList').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-        }
-        
-        // Vẽ biểu đồ tròn
-        drawStaffPieChart(staffArray);
-      });
-    }
-    
-    function drawStaffPieChart(staffData) {
-      const canvas = document.getElementById('staffPieChart');
-      if (!canvas) return;
-      
-      if (staffPieChart) {
-        staffPieChart.destroy();
-        staffPieChart = null;
-      }
-      
-      if (!staffData || staffData.length === 0) {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.font = '12px Arial';
-        ctx.fillStyle = '#999';
-        ctx.textAlign = 'center';
-        ctx.fillText('Chưa có dữ liệu', canvas.width / 2, canvas.height / 2);
-        return;
-      }
-      
-      const colors = ['#9b59b6', '#f1c40f', '#2a9d6e', '#e74c3c', '#3498db'];
-      const labels = staffData.map(s => s.name);
-      const values = staffData.map(s => s.total);
-      const total = values.reduce((a, b) => a + b, 0);
-      
-      staffPieChart = new Chart(canvas, {
-        type: 'pie',
-        data: {
-          labels: labels,
-          datasets: [{
-            data: values,
-            backgroundColor: colors.slice(0, staffData.length),
-            borderWidth: 2,
-            borderColor: '#fff',
-            hoverOffset: 8
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: {
-                font: { size: 9 },
-                boxWidth: 10,
-                generateLabels: function(chart) {
-                  const original = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                  original.forEach((label, i) => {
-                    const value = chart.data.datasets[0].data[i];
-                    const percent = ((value / total) * 100).toFixed(1);
-                    label.text = `${label.text}: ${percent}%`;
-                  });
-                  return original;
-                }
-              }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  const label = context.label || '';
-                  const value = context.raw || 0;
-                  const percent = ((value / total) * 100).toFixed(1);
-                  return `${label}: ${formatMoney(value)} (${percent}%)`;
-                }
-              }
-            }
-          }
         }
       });
     }
@@ -359,7 +285,7 @@
               offset: 4,
               formatter: (value) => value,
               font: { size: 10, weight: 'bold' },
-              color: '#f1c40f'
+              color: '#1a5276'
             },
             tooltip: {
               callbacks: {
@@ -432,7 +358,7 @@
               <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
             </thead>
             <tbody>
-              <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
+              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
               </tr>
             </tbody>
           `;
@@ -697,11 +623,12 @@
       });
     }
     
-    // ========== 8. SỐ ĐƠN HÀNG THEO NGÀY ==========
+    // ========== 8. SỐ ĐƠN HÀNG THEO NGÀY (BIỂU ĐỒ THANH NGANG - 5 NGÀY) ==========
     async function loadDailyOrdersChart() {
       const labels = [];
       const orders = [];
       
+      // 5 ngày gần nhất
       for (let i = 4; i >= 0; i--) {
         const now = new Date();
         const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
@@ -838,6 +765,7 @@
       box-sizing: border-box;
     }
 
+    /* Light mode (mặc định) */
     :root {
       --bg-color: #f0f7f3;
       --card-bg: white;
@@ -847,6 +775,7 @@
       --shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
 
+    /* Dark mode */
     body.dark-mode {
       --bg-color: #1a1a2e;
       --card-bg: #16213e;
@@ -898,6 +827,7 @@
       border-radius: 10px;
     }
 
+    /* Header với nút Dark mode */
     .header {
       display: flex;
       align-items: center;
@@ -943,6 +873,7 @@
       100% { opacity: 0.6; }
     }
 
+    /* Hàng trên cùng 3 ô */
     .top-row-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1080,13 +1011,13 @@
       min-height: 0;
     }
 
-    /* Hàng dưới cùng 2 ô - mới */
+    /* Hàng dưới cùng 2 ô */
     .bottom-row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
       flex-shrink: 0;
-      min-height: 260px;
+      min-height: 200px;
     }
 
     .staff-card {
@@ -1105,27 +1036,6 @@
       color: var(--stat-number);
       border-left: 3px solid var(--stat-number);
       padding-left: 10px;
-    }
-
-    .staff-split {
-      display: flex;
-      gap: 12px;
-      flex: 1;
-      min-height: 0;
-    }
-
-    .staff-pie {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
-    }
-
-    .staff-list-container {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
     }
 
     .staff-list {
@@ -1225,7 +1135,6 @@
       .stat-card { padding: 10px 6px; }
       .stat-card h3 { font-size: 11px; }
       .dashboard { padding: 8px; gap: 8px; }
-      .staff-split { flex-direction: column; }
     }
     
     @media (min-width: 1400px) {
@@ -1298,20 +1207,13 @@
     </div>
   </div>
 
-  <!-- Hàng 4: Top nhân viên (Chart tròn + Danh sách) + Bảng thuốc sắp hết -->
+  <!-- Hàng 4: Top nhân viên + Bảng thuốc sắp hết -->
   <div class="bottom-row-2">
     <div class="staff-card">
       <h3>👩‍⚕️ Top nhân viên bán tốt</h3>
-      <div class="staff-split">
-        <div class="staff-pie">
-          <canvas id="staffPieChart"></canvas>
-        </div>
-        <div class="staff-list-container">
-          <ul class="staff-list" id="topStaffList">
-            <li>Đang tải...</li>
-          </ul>
-        </div>
-      </div>
+      <ul class="staff-list" id="topStaffList">
+        <li>Đang tải...</li>
+      </ul>
     </div>
     <div class="lowstock-card">
       <h3>⚠️ Thuốc sắp hết hàng (tồn kho &lt; 10)</h3>
