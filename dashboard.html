@@ -795,31 +795,107 @@
       options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${formatMoney(ctx.raw)}` } } } }
     });
 
-    // Growth stats
-    const today = getTodayVN();
-    let todayRev = 0, yesterdayRev = 0, weekRev = 0, lastWeekRev = 0, monthRev = 0, lastMonthRev = 0;
-    const vnNow = new Date(new Date().getTime() + (7 * 60 * 60 * 1000));
-    const currentMonth = vnNow.getMonth();
+    // === SỬA LỖI SO SÁNH ===
+    // Lấy thời gian hiện tại theo VN
+    const now = new Date();
+    const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
     const currentYear = vnNow.getFullYear();
-    const todayDate = parseInt(today.split('-')[2]);
+    const currentMonth = vnNow.getMonth() + 1; // 1-12
+    const currentDay = vnNow.getDate();
+    
+    // Tính doanh thu hôm qua (đã có ở trên)
+    let yesterdayRevenue = 0;
+    const yesterday = getYesterdayVN();
+    ordersSnapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      if (getDateFromDatetimeVN(order.datetime) === yesterday) {
+        yesterdayRevenue += order.total || 0;
+      }
+    });
+    
+    // Tính doanh thu hôm nay
+    let todayRevenueTotal = 0;
+    const today = getTodayVN();
+    ordersSnapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      if (getDateFromDatetimeVN(order.datetime) === today) {
+        todayRevenueTotal += order.total || 0;
+      }
+    });
+    
+    // Tính doanh thu tuần này (7 ngày gần nhất, tính từ hôm nay lùi về 7 ngày)
+    let thisWeekRevenue = 0;
+    let lastWeekRevenue = 0;
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(vnNow);
+      date.setDate(currentDay - i);
+      const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+      
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data();
+        if (order.status === 'cancelled') return;
+        if (getDateFromDatetimeVN(order.datetime) === dateStr) {
+          thisWeekRevenue += order.total || 0;
+        }
+      });
+    }
+    
+    // Tính doanh thu tuần trước (7 ngày trước đó)
+    for (let i = 7; i < 14; i++) {
+      const date = new Date(vnNow);
+      date.setDate(currentDay - i);
+      const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
+      
+      ordersSnapshot.forEach(doc => {
+        const order = doc.data();
+        if (order.status === 'cancelled') return;
+        if (getDateFromDatetimeVN(order.datetime) === dateStr) {
+          lastWeekRevenue += order.total || 0;
+        }
+      });
+    }
+    
+    // Tính doanh thu tháng này
+    let thisMonthRevenue = 0;
+    let lastMonthRevenue = 0;
     
     ordersSnapshot.forEach(doc => {
       const order = doc.data();
       if (order.status === 'cancelled') return;
       const orderDate = getDateFromDatetimeVN(order.datetime);
       const [year, month, day] = orderDate.split('-').map(Number);
-      const total = order.total || 0;
-      if (orderDate === today) todayRev += total;
-      if (orderDate === getYesterdayVN()) yesterdayRev += total;
-      if (day >= todayDate - 6 && day <= todayDate) weekRev += total;
-      if (day >= todayDate - 13 && day <= todayDate - 7) lastWeekRev += total;
-      if (year === currentYear && month === currentMonth + 1) monthRev += total;
-      if (year === currentYear && month === currentMonth) lastMonthRev += total;
+      
+      if (year === currentYear && month === currentMonth) {
+        thisMonthRevenue += order.total || 0;
+      }
+      
+      // Tháng trước
+      let prevMonth = currentMonth - 1;
+      let prevYear = currentYear;
+      if (prevMonth === 0) {
+        prevMonth = 12;
+        prevYear = currentYear - 1;
+      }
+      if (year === prevYear && month === prevMonth) {
+        lastMonthRevenue += order.total || 0;
+      }
     });
     
-    document.getElementById('todayGrowth').innerHTML = `${calculateGrowth(todayRev, yesterdayRev) >= 0 ? '▲' : '▼'} ${Math.abs(calculateGrowth(todayRev, yesterdayRev))}%`;
-    document.getElementById('weekGrowth').innerHTML = `${calculateGrowth(weekRev, lastWeekRev) >= 0 ? '▲' : '▼'} ${Math.abs(calculateGrowth(weekRev, lastWeekRev))}%`;
-    document.getElementById('monthGrowth').innerHTML = `${calculateGrowth(monthRev, lastMonthRev) >= 0 ? '▲' : '▼'} ${Math.abs(calculateGrowth(monthRev, lastMonthRev))}%`;
+    // Cập nhật giao diện
+    const todayGrowth = calculateGrowth(todayRevenueTotal, yesterdayRevenue);
+    document.getElementById('todayGrowth').innerHTML = `${todayGrowth >= 0 ? '▲' : '▼'} ${Math.abs(todayGrowth)}%`;
+    document.getElementById('todayGrowth').style.color = todayGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+    
+    const weekGrowth = calculateGrowth(thisWeekRevenue, lastWeekRevenue);
+    document.getElementById('weekGrowth').innerHTML = `${weekGrowth >= 0 ? '▲' : '▼'} ${Math.abs(weekGrowth)}%`;
+    document.getElementById('weekGrowth').style.color = weekGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+    
+    const monthGrowth = calculateGrowth(thisMonthRevenue, lastMonthRevenue);
+    document.getElementById('monthGrowth').innerHTML = `${monthGrowth >= 0 ? '▲' : '▼'} ${Math.abs(monthGrowth)}%`;
+    document.getElementById('monthGrowth').style.color = monthGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
 
     // Top products
     const productSales = {};
