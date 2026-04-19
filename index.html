@@ -155,6 +155,8 @@
       const [staffError, setStaffError] = useState('');
       const [editingStaff, setEditingStaff] = useState(null);
       const [editPin, setEditPin] = useState('');
+      const [editingProduct, setEditingProduct] = useState(null);
+      const [editProductError, setEditProductError] = useState('');
       const chartRef1 = useRef(); const chartRef2 = useRef();
       const chart1 = useRef(); const chart2 = useRef();
 
@@ -244,6 +246,32 @@
           showToast('✅ Đã huỷ đơn & khôi phục tồn kho!');
         } catch(e) { showToast('❌ Lỗi: ' + e.message); }
         setSyncing(false);
+      };
+
+      // ── Edit & delete product handlers ──
+      const saveEditProduct = async () => {
+        setEditProductError('');
+        if (!editingProduct.name.trim()) return setEditProductError('Vui lòng nhập tên sản phẩm.');
+        if (!editingProduct.unit.trim()) return setEditProductError('Vui lòng nhập đơn vị.');
+        if (!editingProduct.price || isNaN(editingProduct.price) || Number(editingProduct.price) <= 0) return setEditProductError('Giá phải là số dương.');
+        if (editingProduct.stock === '' || isNaN(editingProduct.stock) || Number(editingProduct.stock) < 0) return setEditProductError('Tồn kho phải >= 0.');
+        try {
+          await db.collection('products').doc(editingProduct.code).update({
+            name: editingProduct.name.trim(),
+            unit: editingProduct.unit.trim(),
+            price: Number(editingProduct.price),
+            stock: Number(editingProduct.stock)
+          });
+          setEditingProduct(null);
+          showToast('✅ Đã cập nhật sản phẩm!');
+        } catch(e) { setEditProductError('Lỗi: ' + e.message); }
+      };
+      const deleteProduct = async (p) => {
+        if (!window.confirm('Xoá sản phẩm "' + p.name + '"?\nThao tác này không thể hoàn tác!')) return;
+        try {
+          await db.collection('products').doc(p.code).delete();
+          showToast('🗑 Đã xoá ' + p.name);
+        } catch(e) { showToast('Lỗi: ' + e.message); }
       };
 
       // ── Load products from Firestore (real-time listener) ──
@@ -613,6 +641,7 @@
                       <th style={{textAlign:'left',padding:'0.5rem'}} className="desktop-only">ĐV</th>
                       <th style={{textAlign:'right',padding:'0.5rem'}}>Giá</th>
                       <th style={{textAlign:'right',padding:'0.5rem'}}>Tồn</th>
+                      {currentUser?.role === 'manager' && <th style={{textAlign:'center',padding:'0.5rem'}}>Sửa</th>}
                     </tr></thead>
                     <tbody>
                       {products.map(p => {
@@ -628,6 +657,12 @@
                               {isOut && <span style={{marginLeft:'4px',background:'#ef4444',color:'white',fontSize:'0.6rem',padding:'1px 5px',borderRadius:'999px'}}>Hết</span>}
                               {!isOut && isLow && <span style={{marginLeft:'4px',background:'#f97316',color:'white',fontSize:'0.6rem',padding:'1px 5px',borderRadius:'999px'}}>Thấp</span>}
                             </td>
+                            {currentUser?.role === 'manager' && (
+                              <td style={{padding:'0.5rem',textAlign:'center',whiteSpace:'nowrap'}}>
+                                <button onClick={()=>{setEditProductError('');setEditingProduct({...p});}} style={{background:'#eff6ff',border:'1px solid #bfdbfe',color:'#2563eb',borderRadius:'0.4rem',padding:'0.2rem 0.5rem',cursor:'pointer',fontSize:'0.72rem',fontWeight:'600',marginRight:'4px'}}>✏️</button>
+                                <button onClick={()=>deleteProduct(p)} style={{background:'#fef2f2',border:'1px solid #fecaca',color:'#ef4444',borderRadius:'0.4rem',padding:'0.2rem 0.5rem',cursor:'pointer',fontSize:'0.72rem',fontWeight:'600'}}>🗑</button>
+                              </td>
+                            )}
                           </tr>
                         );
                       })}
@@ -791,6 +826,36 @@
               </button>
             ))}
           </div>
+
+          {/* Edit Product Modal */}
+          {editingProduct && (
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem',zIndex:200}}>
+              <div className="glass" style={{borderRadius:'1rem',padding:'1.5rem',maxWidth:'24rem',width:'100%',maxHeight:'90vh',overflowY:'auto'}}>
+                <h2 style={{margin:'0 0 1rem',fontSize:'1rem'}}>✏️ Sửa sản phẩm</h2>
+                <div style={{marginBottom:'0.5rem',padding:'0.5rem 0.75rem',background:'#f0fdf4',borderRadius:'0.5rem',fontSize:'0.8rem',color:'#047857'}}>
+                  Mã SP: <strong>{editingProduct.code}</strong>
+                </div>
+                {[
+                  {label:'Tên sản phẩm *', key:'name', type:'text', placeholder:'Tên sản phẩm'},
+                  {label:'Đơn vị *', key:'unit', type:'text', placeholder:'Hộp, Vỉ, Ống...'},
+                  {label:'Giá (₫) *', key:'price', type:'number', placeholder:'50000'},
+                  {label:'Tồn kho *', key:'stock', type:'number', placeholder:'50'},
+                ].map(({label,key,type,placeholder}) => (
+                  <div key={key} style={{marginBottom:'0.6rem'}}>
+                    <label style={{display:'block',fontWeight:'600',fontSize:'0.8rem',marginBottom:'0.2rem',color:'#374151'}}>{label}</label>
+                    <input type={type} placeholder={placeholder} value={editingProduct[key]}
+                      onChange={e=>setEditingProduct({...editingProduct,[key]:e.target.value})}
+                      style={{fontSize:'0.95rem'}} />
+                  </div>
+                ))}
+                {editProductError && <p style={{color:'#dc2626',fontWeight:'600',margin:'0.4rem 0',fontSize:'0.8rem'}}>⚠️ {editProductError}</p>}
+                <div style={{display:'flex',gap:'0.5rem',marginTop:'1rem'}}>
+                  <button onClick={saveEditProduct} className="btn" style={{flex:1,fontSize:'0.9rem'}}>💾 Lưu thay đổi</button>
+                  <button onClick={()=>{setEditingProduct(null);setEditProductError('');}} style={{flex:1,padding:'0.75rem',borderRadius:'0.5rem',border:'2px solid #e5e7eb',background:'white',cursor:'pointer',fontWeight:'600',color:'#6b7280',fontSize:'0.9rem'}}>Huỷ</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Add Product Modal */}
           {showAddProduct && (
