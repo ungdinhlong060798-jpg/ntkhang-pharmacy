@@ -8,10 +8,756 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
+    import { 
+      getFirestore, 
+      collection, 
+      query, 
+      where, 
+      getDocs, 
+      orderBy, 
+      limit,
+      onSnapshot
+    } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
+    
+    // Đăng ký plugin datalabels
+    Chart.register(ChartDataLabels);
+    
+    // ========== FIREBASE CONFIG ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
+      authDomain: "ntkhang-pharmacy.firebaseapp.com",
+      projectId: "ntkhang-pharmacy",
+      storageBucket: "ntkhang-pharmacy.firebasestorage.app",
+      messagingSenderId: "366824735651",
+      appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
+    };
+    
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    
+    // ========== DARK MODE ==========
+    function initDarkMode() {
+      const savedMode = localStorage.getItem('darkMode');
+      if (savedMode === 'enabled') {
+        document.body.classList.add('dark-mode');
+        document.getElementById('darkModeToggle').innerHTML = '🌙';
+      } else {
+        document.getElementById('darkModeToggle').innerHTML = '☀️';
+      }
+    }
+    
+    function toggleDarkMode() {
+      document.body.classList.toggle('dark-mode');
+      const isDark = document.body.classList.contains('dark-mode');
+      localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+      document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
+      setTimeout(() => {
+        loadRevenue7Days();
+        loadCompareRevenue();
+        loadDailyOrdersChart();
+      }, 100);
+    }
+    
+    // ========== HÀM TIỆN ÍCH ==========
+    function formatMoney(amount) {
+      if (!amount && amount !== 0) return '0 ₫';
+      return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
+    }
+    
+    function formatMoneyShort(amount) {
+      if (!amount && amount !== 0) return '0₫';
+      if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'tr';
+      if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k';
+      return Math.round(amount).toLocaleString('vi-VN') + '₫';
+    }
+    
+    // Tính % tăng trưởng so với hôm qua
+    function calculateGrowth(current, previous) {
+      if (!previous || previous === 0) return 0;
+      return ((current - previous) / previous * 100).toFixed(1);
+    }
+    
+    // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
+    function getTodayVN() {
+      const now = new Date();
+      const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      return vnDate.toISOString().split('T')[0];
+    }
+    
+    function getYesterdayVN() {
+      const now = new Date();
+      const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      vnDate.setDate(vnDate.getDate() - 1);
+      return vnDate.toISOString().split('T')[0];
+    }
+    
+    function getDateFromDatetimeVN(datetimeStr) {
+      if (!datetimeStr) return null;
+      const utcDate = new Date(datetimeStr);
+      const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
+      return vnDate.toISOString().split('T')[0];
+    }
+    
+    let barChart = null;
+    let compareChart = null;
+    let dailyOrdersChart = null;
+    let horizontalBarChart = null;
+    
+    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY (có % tăng trưởng) ==========
+    function listenTodayStats() {
+      const ordersRef = collection(db, 'orders');
+      const todayVN = getTodayVN();
+      const yesterdayVN = getYesterdayVN();
+      
+      onSnapshot(ordersRef, (snapshot) => {
+        let todayRevenue = 0;
+        let todayOrders = 0;
+        let yesterdayRevenue = 0;
+        let yesterdayOrders = 0;
+        
+        snapshot.forEach(doc => {
+          const order = doc.data();
+          if (order.status === 'cancelled') return;
+          
+          const orderDate = getDateFromDatetimeVN(order.datetime);
+          const total = order.total || 0;
+          
+          if (orderDate === todayVN) {
+            todayRevenue += total;
+            todayOrders++;
+          } else if (orderDate === yesterdayVN) {
+            yesterdayRevenue += total;
+            yesterdayOrders++;
+          }
+        });
+        
+        // Cập nhật doanh thu hôm nay
+        const revenueGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
+        document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
+        document.getElementById('revenueGrowth').innerHTML = `${revenueGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revenueGrowth)}% vs hôm qua`;
+        document.getElementById('revenueGrowth').style.color = revenueGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+        
+        // Cập nhật số đơn hôm nay
+        const orderGrowth = calculateGrowth(todayOrders, yesterdayOrders);
+        document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
+        document.getElementById('orderGrowth').innerHTML = `${orderGrowth >= 0 ? '▲' : '▼'} ${Math.abs(orderGrowth)}%`;
+        document.getElementById('orderGrowth').style.color = orderGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+      });
+    }
+    
+    // ========== 2. REALTIME: SỐ SẢN PHẨM SẮP HẾT ==========
+    function listenLowStockCount() {
+      const productsRef = collection(db, 'products');
+      
+      onSnapshot(productsRef, (snapshot) => {
+        let lowStockCount = 0;
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const stock = data.stock || 0;
+          if (stock < 10) {
+            lowStockCount++;
+          }
+        });
+        
+        document.getElementById('lowStockCount').innerHTML = lowStockCount + ' sản phẩm';
+        const warningEl = document.getElementById('lowStockWarning');
+        if (lowStockCount > 0) {
+          warningEl.innerHTML = '⚠️ Cần nhập hàng!';
+          warningEl.style.color = '#e74c3c';
+        } else {
+          warningEl.innerHTML = '✅ Đủ hàng';
+          warningEl.style.color = '#2a9d6e';
+        }
+      });
+    }
+    
+    // ========== 3. REALTIME: TOP NHÂN VIÊN BÁN TỐT ==========
+    function listenTopStaff() {
+      const ordersRef = collection(db, 'orders');
+      
+      onSnapshot(ordersRef, (snapshot) => {
+        const staffSales = {};
+        
+        snapshot.forEach(doc => {
+          const order = doc.data();
+          if (order.status === 'cancelled') return;
+          
+          let employee = order.employee;
+          if (!employee || employee === 'undefined' || employee === 'Unknown' || employee === '') {
+            employee = 'Nhân viên';
+          }
+          const total = order.total || 0;
+          
+          if (staffSales[employee]) {
+            staffSales[employee] += total;
+          } else {
+            staffSales[employee] = total;
+          }
+        });
+        
+        const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
+        staffArray.sort((a, b) => b.total - a.total);
+        const topStaff = staffArray.slice(0, 5);
+        
+        if (topStaff.length > 0) {
+          document.getElementById('topStaffList').innerHTML = topStaff.map((staff, idx) => `
+            <li>
+              <span class="staff-name">${idx + 1}. ${staff.name}</span>
+              <span class="staff-amount">${formatMoney(staff.total)}</span>
+            </li>
+          `).join('');
+        } else {
+          document.getElementById('topStaffList').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+        }
+      });
+    }
+    
+    // ========== 4. REALTIME: TOP 5 SẢN PHẨM BÁN CHẠY ==========
+    function listenTopProductsHorizontal() {
+      const ordersRef = collection(db, 'orders');
+      
+      onSnapshot(ordersRef, (snapshot) => {
+        const productSales = {};
+        
+        snapshot.forEach(doc => {
+          const order = doc.data();
+          if (order.status === 'cancelled') return;
+          
+          const items = order.items || [];
+          items.forEach(item => {
+            const productName = item.name;
+            const quantity = item.quantity || 1;
+            
+            if (productSales[productName]) {
+              productSales[productName] += quantity;
+            } else {
+              productSales[productName] = quantity;
+            }
+          });
+        });
+        
+        const productsArray = Object.entries(productSales).map(([name, sold]) => ({ name, sold }));
+        productsArray.sort((a, b) => b.sold - a.sold);
+        const top5 = productsArray.slice(0, 5);
+        
+        drawHorizontalBarChart(top5);
+      });
+    }
+    
+    function drawHorizontalBarChart(data) {
+      const canvas = document.getElementById('horizontalBarChart');
+      if (!canvas) return;
+      
+      if (horizontalBarChart) {
+        horizontalBarChart.destroy();
+        horizontalBarChart = null;
+      }
+      
+      if (!data || data.length === 0) return;
+      
+      const labels = data.map(p => p.name);
+      const values = data.map(p => p.sold);
+      
+      horizontalBarChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Số lượng bán',
+            data: values,
+            backgroundColor: '#f1c40f',
+            borderRadius: 6,
+            barPercentage: 0.7,
+            categoryPercentage: 0.8
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            datalabels: {
+              anchor: 'end',
+              align: 'right',
+              offset: 4,
+              formatter: (value) => value,
+              font: { size: 10, weight: 'bold' },
+              color: '#1a5276'
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `Số lượng: ${context.raw} cái`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { 
+                font: { size: 9 },
+                stepSize: 1,
+                callback: function(val) {
+                  return Number.isInteger(val) ? val : '';
+                }
+              },
+              title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { font: { size: 10 } }
+            }
+          }
+        }
+      });
+    }
+    
+    // ========== 5. REALTIME: THUỐC SẮP HẾT (BẢNG CHI TIẾT) ==========
+    function listenLowStockDetail() {
+      const productsRef = collection(db, 'products');
+      
+      onSnapshot(productsRef, (snapshot) => {
+        const products = [];
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const stock = data.stock || 0;
+          if (stock < 10) {
+            products.push({
+              name: data.name || 'Sản phẩm',
+              code: data.code || '---',
+              stock: stock
+            });
+          }
+        });
+        
+        products.sort((a, b) => a.stock - b.stock);
+        
+        if (products.length > 0) {
+          document.getElementById('lowStockDetailTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              ${products.map(p => `
+                <tr>
+                  <td>${p.name}</td>
+                  <td>${p.code}</td>
+                  <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
+                  <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          `;
+        } else {
+          document.getElementById('lowStockDetailTable').innerHTML = `
+            <thead>
+              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            </thead>
+            <tbody>
+              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
+              </tr>
+            </tbody>
+          `;
+        }
+      });
+    }
+    
+    // ========== 6. DOANH THU 7 NGÀY ==========
+    async function loadRevenue7Days() {
+      const labels = [];
+      const revenues = [];
+      
+      for (let i = 6; i >= 0; i--) {
+        const now = new Date();
+        const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+        vnNow.setDate(vnNow.getDate() - i);
+        
+        const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
+        labels.push(displayDate);
+        
+        const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
+        
+        try {
+          const ordersRef = collection(db, 'orders');
+          const snapshot = await getDocs(ordersRef);
+          
+          let dailyTotal = 0;
+          snapshot.forEach(doc => {
+            const order = doc.data();
+            if (order.status === 'cancelled') return;
+            
+            const orderDate = getDateFromDatetimeVN(order.datetime);
+            if (orderDate === dateStr) {
+              dailyTotal += order.total || 0;
+            }
+          });
+          revenues.push(dailyTotal);
+        } catch (error) {
+          revenues.push(0);
+        }
+      }
+      
+      drawBarChartWithTrend(labels, revenues);
+    }
+    
+    function drawBarChartWithTrend(labels, values) {
+      const canvas = document.getElementById('barChart');
+      if (!canvas) return;
+      
+      if (barChart) barChart.destroy();
+      
+      barChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Doanh thu',
+              type: 'bar',
+              data: values,
+              backgroundColor: '#2a9d6e',
+              borderRadius: 6,
+              barPercentage: 0.6,
+              categoryPercentage: 0.7,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 9, weight: 'bold' },
+                color: '#1a6d4c'
+              }
+            },
+            {
+              label: '📈 Xu hướng',
+              type: 'line',
+              data: values,
+              borderColor: '#e74c3c',
+              borderWidth: 2,
+              pointRadius: 3,
+              pointBackgroundColor: '#e74c3c',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 1,
+              fill: false,
+              tension: 0.3,
+              datalabels: { display: false }
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          layout: {
+            padding: { top: 20 }
+          },
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${formatMoney(context.raw)}`;
+                }
+              }
+            },
+            datalabels: { display: true }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { display: false },
+              ticks: { 
+                font: { size: 9 },
+                callback: function(value) {
+                  return value.toLocaleString('vi-VN');
+                },
+                maxTicksLimit: 6
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 9 } }
+            }
+          }
+        }
+      });
+    }
+    
+    // ========== 7. SO SÁNH DOANH THU ==========
+    async function loadCompareRevenue() {
+      const now = new Date();
+      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      const currentMonth = vnNow.getMonth();
+      const currentYear = vnNow.getFullYear();
+      
+      let prevMonth = currentMonth - 1;
+      let prevYear = currentYear;
+      if (prevMonth < 0) {
+        prevMonth = 11;
+        prevYear--;
+      }
+      
+      const weeks = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'];
+      const currentMonthData = [0, 0, 0, 0];
+      const prevMonthData = [0, 0, 0, 0];
+      
+      try {
+        const ordersRef = collection(db, 'orders');
+        const snapshot = await getDocs(ordersRef);
+        
+        snapshot.forEach(doc => {
+          const order = doc.data();
+          if (order.status === 'cancelled') return;
+          
+          const orderDate = getDateFromDatetimeVN(order.datetime);
+          const [year, month, day] = orderDate.split('-').map(Number);
+          
+          const weekIndex = Math.min(Math.floor((day - 1) / 7), 3);
+          
+          if (year === currentYear && month === currentMonth + 1) {
+            currentMonthData[weekIndex] += order.total || 0;
+          } else if (year === prevYear && month === prevMonth + 1) {
+            prevMonthData[weekIndex] += order.total || 0;
+          }
+        });
+      } catch (error) {
+        console.error('Lỗi lấy dữ liệu so sánh:', error);
+      }
+      
+      drawCompareChart(weeks, currentMonthData, prevMonthData);
+    }
+    
+    function drawCompareChart(labels, currentData, prevData) {
+      const canvas = document.getElementById('compareChart');
+      if (!canvas) return;
+      
+      if (compareChart) compareChart.destroy();
+      
+      compareChart = new Chart(canvas, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'Tháng này',
+              data: currentData,
+              borderColor: '#3498db',
+              backgroundColor: 'rgba(52, 152, 219, 0.1)',
+              borderWidth: 2,
+              pointRadius: 4,
+              pointBackgroundColor: '#3498db',
+              pointBorderColor: '#fff',
+              tension: 0.3,
+              fill: true,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 8 },
+                color: '#3498db'
+              }
+            },
+            {
+              label: 'Tháng trước',
+              data: prevData,
+              borderColor: '#e67e22',
+              backgroundColor: 'rgba(230, 126, 34, 0.1)',
+              borderWidth: 2,
+              pointRadius: 4,
+              pointBackgroundColor: '#e67e22',
+              pointBorderColor: '#fff',
+              tension: 0.3,
+              fill: true,
+              datalabels: {
+                anchor: 'end',
+                align: 'top',
+                offset: 4,
+                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
+                font: { size: 8 },
+                color: '#e67e22'
+              }
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `${context.dataset.label}: ${formatMoney(context.raw)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              grid: { display: false },
+              ticks: { 
+                font: { size: 9 },
+                callback: function(value) {
+                  return value.toLocaleString('vi-VN');
+                },
+                maxTicksLimit: 6
+              }
+            },
+            x: {
+              grid: { display: false },
+              ticks: { font: { size: 9 } }
+            }
+          }
+        }
+      });
+    }
+    
+    // ========== 8. SỐ ĐƠN HÀNG THEO NGÀY (BIỂU ĐỒ THANH NGANG - 5 NGÀY) ==========
+    async function loadDailyOrdersChart() {
+      const labels = [];
+      const orders = [];
+      
+      // 5 ngày gần nhất
+      for (let i = 4; i >= 0; i--) {
+        const now = new Date();
+        const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+        vnNow.setDate(vnNow.getDate() - i);
+        
+        const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
+        labels.push(displayDate);
+        
+        const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
+        
+        try {
+          const ordersRef = collection(db, 'orders');
+          const snapshot = await getDocs(ordersRef);
+          
+          let dailyOrders = 0;
+          snapshot.forEach(doc => {
+            const order = doc.data();
+            if (order.status === 'cancelled') return;
+            
+            const orderDate = getDateFromDatetimeVN(order.datetime);
+            if (orderDate === dateStr) {
+              dailyOrders++;
+            }
+          });
+          orders.push(dailyOrders);
+        } catch (error) {
+          orders.push(0);
+        }
+      }
+      
+      drawDailyOrdersBarChart(labels, orders);
+    }
+    
+    function drawDailyOrdersBarChart(labels, values) {
+      const canvas = document.getElementById('dailyOrdersChart');
+      if (!canvas) return;
+      
+      if (dailyOrdersChart) {
+        dailyOrdersChart.destroy();
+        dailyOrdersChart = null;
+      }
+      
+      dailyOrdersChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Số đơn hàng',
+            data: values,
+            backgroundColor: '#3498db',
+            borderRadius: 6,
+            barPercentage: 0.7,
+            categoryPercentage: 0.8,
+            datalabels: {
+              anchor: 'end',
+              align: 'top',
+              offset: 4,
+              formatter: (value) => value > 0 ? value : '',
+              font: { size: 9, weight: 'bold' },
+              color: '#3498db'
+            }
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return `Số đơn: ${context.raw} đơn`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { 
+                font: { size: 9 },
+                stepSize: 1,
+                callback: function(val) {
+                  return Number.isInteger(val) ? val : '';
+                }
+              },
+              title: { display: true, text: 'Số đơn hàng', font: { size: 10 } }
+            },
+            y: {
+              grid: { display: false },
+              ticks: { font: { size: 10 } }
+            }
+          }
+        }
+      });
+    }
+    
+    function updateTimestamp() {
+      const now = new Date();
+      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
+    }
+    
+    // ========== KHỞI ĐỘNG ==========
+    console.log('🚀 Khởi động Dashboard');
+    
+    initDarkMode();
+    document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+    
+    listenTodayStats();
+    listenLowStockCount();
+    listenTopStaff();
+    listenTopProductsHorizontal();
+    listenLowStockDetail();
+    loadRevenue7Days();
+    loadCompareRevenue();
+    loadDailyOrdersChart();
+    
+    updateTimestamp();
+    setInterval(updateTimestamp, 1000);
+    
+    const ordersRef = collection(db, 'orders');
+    onSnapshot(ordersRef, () => {
+      loadRevenue7Days();
+      loadCompareRevenue();
+      loadDailyOrdersChart();
+    });
+  </script>
+
   <style>
     * {
       margin: 0;
@@ -19,24 +765,24 @@
       box-sizing: border-box;
     }
 
+    /* Light mode (mặc định) */
     :root {
       --bg-color: #f0f7f3;
       --card-bg: white;
       --text-color: #1a3a2e;
       --border-color: #e8f0ec;
       --stat-number: #1a6d4c;
-      --shadow: 0 4px 16px rgba(0,0,0,0.05);
-      --shadow-hover: 0 8px 24px rgba(0,0,0,0.1);
+      --shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
 
+    /* Dark mode */
     body.dark-mode {
       --bg-color: #1a1a2e;
       --card-bg: #16213e;
       --text-color: #e0e0e0;
       --border-color: #2d2d44;
       --stat-number: #6ab04c;
-      --shadow: 0 4px 16px rgba(0,0,0,0.3);
-      --shadow-hover: 0 8px 24px rgba(0,0,0,0.4);
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
 
     html, body {
@@ -48,7 +794,7 @@
     }
 
     body {
-      font-family: 'Segoe UI', 'Inter', Arial, sans-serif;
+      font-family: 'Segoe UI', Arial, sans-serif;
       color: var(--text-color);
       padding: 0;
       height: 100vh;
@@ -58,19 +804,19 @@
 
     .dashboard {
       width: 100%;
-      height: 100%;
       max-width: 100%;
       margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 10px;
+      height: 100%;
       overflow-y: auto;
-      padding: 20px 24px;
+      padding: 12px;
       box-sizing: border-box;
     }
-
+    
     .dashboard::-webkit-scrollbar {
-      width: 6px;
+      width: 5px;
     }
     .dashboard::-webkit-scrollbar-track {
       background: var(--border-color);
@@ -81,6 +827,7 @@
       border-radius: 10px;
     }
 
+    /* Header với nút Dark mode */
     .header {
       display: flex;
       align-items: center;
@@ -89,913 +836,401 @@
     }
     h1 {
       text-align: center;
-      font-size: 24px;
+      font-size: 20px;
       color: var(--stat-number);
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 12px;
+      gap: 8px;
       flex: 1;
-      font-weight: 700;
-    }
-    .date {
-      font-size: 14px;
-      color: #5a6e66;
-      background: var(--card-bg);
-      padding: 6px 14px;
-      border-radius: 30px;
-      box-shadow: var(--shadow);
     }
     .dark-mode-btn {
       background: var(--card-bg);
       border: none;
       font-size: 20px;
       cursor: pointer;
-      padding: 8px 14px;
+      padding: 6px 12px;
       border-radius: 30px;
       box-shadow: var(--shadow);
-      transition: all 0.2s ease;
+      transition: transform 0.2s;
     }
     .dark-mode-btn:hover {
       transform: scale(1.05);
-      box-shadow: var(--shadow-hover);
-    }
-    .realtime-badge {
-      background: linear-gradient(135deg, #2a9d6e, #1a6d4c);
-      color: white;
-      font-size: 10px;
-      padding: 4px 12px;
-      border-radius: 30px;
-      animation: pulse 2s infinite;
-      font-weight: 600;
-    }
-    @keyframes pulse {
-      0% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0.4); }
-      50% { opacity: 1; box-shadow: 0 0 0 4px rgba(42, 157, 110, 0); }
-      100% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0); }
     }
 
-    .kpi-row {
+    .realtime-badge {
+      background: #2a9d6e;
+      color: white;
+      font-size: 9px;
+      padding: 2px 8px;
+      border-radius: 20px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    /* Hàng trên cùng 3 ô */
+    .top-row-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 20px;
+      gap: 12px;
       flex-shrink: 0;
     }
-    .kpi-card {
+
+    .stat-card {
       background: var(--card-bg);
-      border-radius: 20px;
-      padding: 18px 20px;
+      border-radius: 16px;
+      padding: 12px 8px;
       box-shadow: var(--shadow);
-      transition: all 0.3s ease;
-      height: 120px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
+      text-align: center;
+      transition: background 0.3s ease;
     }
-    .kpi-card:hover {
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-hover);
-    }
-    .kpi-card h3 {
-      font-size: 14px;
+
+    .stat-card h3 {
+      font-size: 13px;
       color: #5a6e66;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       font-weight: 500;
     }
-    .kpi-value {
-      font-size: 28px;
-      font-weight: 800;
-      color: var(--stat-number);
-      margin-bottom: 6px;
-    }
-    .kpi-growth {
-      font-size: 12px;
+    body.dark-mode .stat-card h3 {
+      color: #aaa;
     }
 
-    .row-2cols {
-      display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 20px;
-      flex-shrink: 0;
-    }
-    .chart-card {
-      background: var(--card-bg);
-      border-radius: 20px;
-      padding: 18px;
-      box-shadow: var(--shadow);
-      transition: all 0.3s ease;
-      display: flex;
-      flex-direction: column;
-    }
-    .chart-card:hover {
-      box-shadow: var(--shadow-hover);
-    }
-    .chart-card h3 {
-      font-size: 16px;
-      margin-bottom: 16px;
+    .stat-number {
+      font-size: 24px;
+      font-weight: bold;
       color: var(--stat-number);
-      font-weight: 600;
-      border-left: 4px solid var(--stat-number);
-      padding-left: 12px;
-      flex-shrink: 0;
     }
-    .revenue-chart-container {
-      flex: 1;
-      min-height: 340px;
-      position: relative;
+
+    .growth {
+      font-size: 11px;
+      margin-top: 4px;
     }
-    .revenue-chart-container canvas {
-      max-height: 340px !important;
-    }
-    .compare-content {
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-      flex: 1;
-      justify-content: center;
-    }
-    .donut-container {
-      width: 100%;
-      max-width: 300px;
-      margin: 0 auto;
-      flex-shrink: 0;
-    }
-    .donut-container canvas {
-      max-height: 240px !important;
-    }
-    .growth-stats {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .growth-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 14px;
-      background: var(--bg-color);
-      border-radius: 12px;
-      font-size: 14px;
-    }
-    .growth-label {
+
+    .warning-text {
+      font-size: 11px;
+      margin-top: 4px;
       font-weight: 500;
     }
-    .growth-value {
-      font-weight: 700;
-      color: #2a9d6e;
-    }
 
-    .row-3cols {
+    .row-2-charts {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      flex: 0.5;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    .chart-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      transition: background 0.3s ease;
+    }
+
+    .chart-card h3 {
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: var(--stat-number);
+      padding-left: 6px;
+    }
+
+    .chart-container {
+      width: 100%;
+      height: auto;
+      min-height: 200px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: auto !important;
+      max-height: 200px;
+    }
+
+    .row-3-charts {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      flex: 1;
       min-height: 0;
     }
-    .left-card, .right-card {
+
+    .left-card {
       background: var(--card-bg);
-      border-radius: 20px;
-      padding: 14px;
+      border-radius: 16px;
+      padding: 12px;
       box-shadow: var(--shadow);
       display: flex;
       flex-direction: column;
       min-height: 0;
-      transition: all 0.3s ease;
+      transition: background 0.3s ease;
     }
-    .left-card:hover, .right-card:hover {
-      box-shadow: var(--shadow-hover);
-    }
-    .left-card h3, .right-card h3 {
-      font-size: 14px;
-      margin-bottom: 10px;
+
+    .left-card h3 {
+      font-size: 13px;
+      margin-bottom: 8px;
       color: var(--stat-number);
-      font-weight: 600;
-      border-left: 4px solid var(--stat-number);
-      padding-left: 12px;
+      border-left: 3px solid var(--stat-number);
+      padding-left: 10px;
       flex-shrink: 0;
     }
-    .left-container, .right-container {
+
+    .left-container {
+      width: 100%;
       flex: 1;
       min-height: 0;
-      overflow-y: auto;
-    }
-    .left-container canvas {
-      max-height: 150px !important;
     }
 
-    .list-with-bar {
-      list-style: none;
-    }
-    .list-with-bar li {
+    .right-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
       display: flex;
+      flex-direction: column;
+      min-height: 0;
+      transition: background 0.3s ease;
+    }
+
+    .right-card h3 {
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: var(--stat-number);
+      border-left: 3px solid var(--stat-number);
+      padding-left: 10px;
+      flex-shrink: 0;
+    }
+
+    .right-container {
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Hàng dưới cùng 2 ô */
+    .bottom-row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      flex-shrink: 0;
+      min-height: 200px;
+    }
+
+    .staff-card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      transition: background 0.3s ease;
+    }
+
+    .staff-card h3 {
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: var(--stat-number);
+      border-left: 3px solid var(--stat-number);
+      padding-left: 10px;
+    }
+
+    .staff-list {
+      list-style: none;
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .staff-list li {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      gap: 8px;
       padding: 6px 0;
       border-bottom: 1px solid var(--border-color);
       font-size: 12px;
     }
-    .list-with-bar li:last-child {
+
+    .staff-list li:last-child {
       border-bottom: none;
     }
-    .rank {
-      width: 26px;
-      font-weight: 700;
-      color: var(--stat-number);
-    }
-    .item-name {
-      flex: 2;
+
+    .staff-name {
       font-weight: 500;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      font-size: 12px;
-    }
-    .bar-wrapper {
-      flex: 3;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .bar {
-      flex: 1;
-      height: 6px;
-      background: var(--border-color);
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .bar-fill {
-      height: 100%;
-      border-radius: 10px;
-      transition: width 0.3s;
-    }
-    .value {
-      min-width: 65px;
-      text-align: right;
-      font-weight: 600;
-      color: var(--stat-number);
-      font-size: 11px;
     }
 
-    .lowstock-list {
-      list-style: none;
-      margin-bottom: 10px;
-    }
-    .lowstock-list li {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px solid var(--border-color);
-      font-size: 12px;
-    }
-    .lowstock-name {
-      font-weight: 500;
-    }
-    .lowstock-stock {
-      font-weight: 600;
-    }
-    .stock-low {
-      color: #e74c3c;
-    }
-    .stock-warning {
-      color: #f39c12;
-    }
-    .view-more-btn {
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      padding: 6px 12px;
-      border-radius: 30px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 500;
+    .staff-amount {
       color: var(--stat-number);
-      transition: all 0.2s;
-      width: 100%;
-      text-align: center;
-      margin-top: auto;
-    }
-    .view-more-btn:hover {
-      background: var(--stat-number);
-      color: white;
-      border-color: var(--stat-number);
+      font-weight: bold;
     }
 
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      z-index: 1000;
-      justify-content: center;
-      align-items: center;
-    }
-    .modal.active {
-      display: flex;
-    }
-    .modal-content {
+    .lowstock-card {
       background: var(--card-bg);
-      border-radius: 24px;
-      width: 90%;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
-      padding: 24px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.2);
-    }
-    .modal-header {
+      border-radius: 16px;
+      padding: 12px;
+      box-shadow: var(--shadow);
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-      padding-bottom: 12px;
-      border-bottom: 2px solid var(--border-color);
+      flex-direction: column;
+      overflow: hidden;
+      transition: background 0.3s ease;
     }
-    .modal-header h3 {
-      font-size: 20px;
+
+    .lowstock-card h3 {
+      font-size: 13px;
+      margin-bottom: 8px;
       color: var(--stat-number);
+      border-left: 3px solid var(--stat-number);
+      padding-left: 10px;
     }
-    .close-modal {
-      font-size: 28px;
-      cursor: pointer;
-      color: #999;
-      transition: 0.2s;
+
+    .lowstock-table-wrapper {
+      overflow-y: auto;
+      flex: 1;
     }
-    .close-modal:hover {
-      color: #e74c3c;
-    }
-    .modal-table {
+
+    table {
       width: 100%;
+      min-width: 300px;
       border-collapse: collapse;
     }
-    .modal-table th, .modal-table td {
-      padding: 12px 8px;
+
+    th, td {
+      padding: 6px 8px;
       text-align: left;
       border-bottom: 1px solid var(--border-color);
+      font-size: 11px;
+      color: var(--text-color);
     }
-    .modal-table th {
+
+    th {
       background: var(--bg-color);
+      color: var(--stat-number);
       font-weight: 600;
+    }
+
+    .stock-low {
+      color: #e74c3c;
+      font-weight: bold;
+    }
+
+    .stock-warning {
+      color: #f39c12;
+      font-weight: bold;
     }
 
     .update-time {
       text-align: center;
-      margin-top: 8px;
+      margin-top: 6px;
       color: #8aa99e;
-      font-size: 12px;
+      font-size: 10px;
       flex-shrink: 0;
     }
 
-    @media (max-width: 1200px) {
-      .dashboard { padding: 16px; gap: 12px; }
-      .kpi-value { font-size: 24px; }
-      .kpi-card { height: 110px; padding: 14px 16px; }
-      .revenue-chart-container { min-height: 300px; }
-      .revenue-chart-container canvas { max-height: 300px !important; }
-      .donut-container { max-width: 240px; }
-      .donut-container canvas { max-height: 200px !important; }
-    }
     @media (max-width: 900px) {
-      .row-2cols, .row-3cols { grid-template-columns: 1fr; gap: 12px; }
-      .kpi-row { gap: 12px; }
-      .dashboard { padding: 12px; }
+      .row-2-charts, .row-3-charts, .bottom-row-2 { grid-template-columns: 1fr; gap: 10px; }
+      .stat-number { font-size: 20px; }
+      .top-row-3 { gap: 8px; }
+      .stat-card { padding: 10px 6px; }
+      .stat-card h3 { font-size: 11px; }
+      .dashboard { padding: 8px; gap: 8px; }
+    }
+    
+    @media (min-width: 1400px) {
+      .stat-number { font-size: 28px; }
+      .chart-container { min-height: 240px; }
+      canvas { max-height: 240px; }
+      .dashboard { padding: 16px; gap: 14px; }
     }
   </style>
 </head>
 <body>
 <div class="dashboard">
   <div class="header">
-    <div class="date" id="currentDate">Hôm nay: --/--/----</div>
+    <div></div>
     <h1>
-      💊 DASHBOARD NHÀ THUỐC
+      💊 NTK.Hang Pharmacy Dashboard 
       <span class="realtime-badge">🔴 LIVE</span>
     </h1>
     <button class="dark-mode-btn" id="darkModeToggle">☀️</button>
   </div>
 
-  <div class="kpi-row">
-    <div class="kpi-card">
+  <!-- Hàng 1: 3 ô -->
+  <div class="top-row-3">
+    <div class="stat-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
-      <div class="kpi-value" id="todayRevenue">0 ₫</div>
-      <div class="kpi-growth" id="revenueGrowth">▲ 0% so với hôm qua</div>
+      <div class="stat-number" id="todayRevenue">0 ₫</div>
+      <div class="growth" id="revenueGrowth">▲ 0% vs hôm qua</div>
     </div>
-    <div class="kpi-card">
+    <div class="stat-card">
       <h3>📦 SỐ ĐƠN HÔM NAY</h3>
-      <div class="kpi-value" id="todayOrders">0 đơn</div>
-      <div class="kpi-growth" id="orderGrowth">▲ 0 đơn</div>
+      <div class="stat-number" id="todayOrders">0 đơn</div>
+      <div class="growth" id="orderGrowth">▲ 0%</div>
     </div>
-    <div class="kpi-card">
-      <h3>⚠️ THUỐC SẮP HẾT</h3>
-      <div class="kpi-value" id="lowStockCount">0 mặt hàng</div>
-      <div class="kpi-growth" id="lowStockGrowth">✅ Đủ hàng</div>
+    <div class="stat-card">
+      <h3>⚠️ SẮP HẾT HÀNG</h3>
+      <div class="stat-number" id="lowStockCount">0 sản phẩm</div>
+      <div class="warning-text" id="lowStockWarning">✅ Đủ hàng</div>
     </div>
   </div>
 
-  <div class="row-2cols">
+  <!-- Hàng 2: Doanh thu 7 ngày + So sánh doanh thu -->
+  <div class="row-2-charts">
     <div class="chart-card">
-      <h3>📊 DOANH THU 7 NGÀY</h3>
-      <div class="revenue-chart-container">
-        <canvas id="revenueChart"></canvas>
+      <h3>📊 Doanh thu 7 ngày</h3>
+      <div class="chart-container">
+        <canvas id="barChart"></canvas>
       </div>
     </div>
     <div class="chart-card">
-      <h3>📈 SO SÁNH DOANH THU</h3>
-      <div class="compare-content">
-        <div class="donut-container">
-          <canvas id="donutChart"></canvas>
-        </div>
-        <div class="growth-stats">
-          <div class="growth-item"><span class="growth-label">📍 Hôm nay</span><span class="growth-value" id="todayGrowth">▲ 0%</span></div>
-          <div class="growth-item"><span class="growth-label">📍 Tuần này</span><span class="growth-value" id="weekGrowth">▲ 0%</span></div>
-          <div class="growth-item"><span class="growth-label">📍 Tháng này</span><span class="growth-value" id="monthGrowth">▲ 0%</span></div>
-        </div>
+      <h3>📈 So sánh doanh thu</h3>
+      <div class="chart-container">
+        <canvas id="compareChart"></canvas>
       </div>
     </div>
   </div>
 
-  <div class="row-3cols">
+  <!-- Hàng 3: Số đơn theo ngày + Top 5 sản phẩm -->
+  <div class="row-3-charts">
     <div class="left-card">
-      <h3>📊 ĐƠN HÀNG THEO NGÀY</h3>
+      <h3>📊 Số đơn hàng theo ngày</h3>
       <div class="left-container">
         <canvas id="dailyOrdersChart"></canvas>
       </div>
     </div>
     <div class="right-card">
-      <h3>🏆 TOP 5 SẢN PHẨM BÁN CHẠY</h3>
+      <h3>🏆 Top 5 sản phẩm bán chạy</h3>
       <div class="right-container">
-        <ul class="list-with-bar" id="topProductsList">
-          <li>Đang tải...</li>
-        </ul>
+        <canvas id="horizontalBarChart"></canvas>
       </div>
     </div>
   </div>
 
-  <div class="row-3cols">
-    <div class="left-card">
-      <h3>👩‍⚕️ TOP NHÂN VIÊN BÁN TỐT</h3>
-      <div class="right-container">
-        <ul class="list-with-bar" id="topStaffList">
-          <li>Đang tải...</li>
-        </ul>
-      </div>
+  <!-- Hàng 4: Top nhân viên + Bảng thuốc sắp hết -->
+  <div class="bottom-row-2">
+    <div class="staff-card">
+      <h3>👩‍⚕️ Top nhân viên bán tốt</h3>
+      <ul class="staff-list" id="topStaffList">
+        <li>Đang tải...</li>
+      </ul>
     </div>
-    <div class="right-card">
-      <h3>⚠️ THUỐC SẮP HẾT HÀNG</h3>
-      <div class="right-container">
-        <ul class="lowstock-list" id="lowstockPreviewList">
-          <li>Đang tải...</li>
-        </ul>
-        <button class="view-more-btn" id="viewMoreBtn">📋 Xem thêm</button>
+    <div class="lowstock-card">
+      <h3>⚠️ Thuốc sắp hết hàng (tồn kho &lt; 10)</h3>
+      <div class="lowstock-table-wrapper">
+        <table id="lowStockDetailTable">
+          <thead>
+            <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="4">Đang tải...</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
 
   <div class="update-time" id="updateTime"></div>
 </div>
-
-<div id="modal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>📋 Danh sách thuốc sắp hết hàng</h3>
-      <span class="close-modal">&times;</span>
-    </div>
-    <div id="modalBody"></div>
-  </div>
-</div>
-
-<script>
-  Chart.register(ChartDataLabels);
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
-    authDomain: "ntkhang-pharmacy.firebaseapp.com",
-    projectId: "ntkhang-pharmacy",
-    storageBucket: "ntkhang-pharmacy.firebasestorage.app",
-    messagingSenderId: "366824735651",
-    appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
-  };
-  
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-
-  function formatMoney(amount) {
-    if (!amount && amount !== 0) return '0 ₫';
-    return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
-  }
-
-  function formatMoneyShort(amount) {
-    if (!amount && amount !== 0) return '0₫';
-    if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'tr';
-    if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k';
-    return Math.round(amount).toLocaleString('vi-VN') + '₫';
-  }
-
-  function getDateFromDatetimeVN(datetimeStr) {
-    if (!datetimeStr) return null;
-    const utcDate = new Date(datetimeStr);
-    const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
-    return vnDate.toISOString().split('T')[0];
-  }
-
-  function getTodayVN() {
-    const now = new Date();
-    const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    return vnDate.toISOString().split('T')[0];
-  }
-
-  function getYesterdayVN() {
-    const now = new Date();
-    const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    vnDate.setDate(vnDate.getDate() - 1);
-    return vnDate.toISOString().split('T')[0];
-  }
-
-  function calculateGrowth(current, previous) {
-    if (!previous || previous === 0) return 0;
-    return ((current - previous) / previous * 100).toFixed(1);
-  }
-
-  let barChart = null, donutChart = null, dailyOrdersChart = null;
-  let allLowStockProducts = [];
-
-  function initDarkMode() {
-    const savedMode = localStorage.getItem('darkMode');
-    if (savedMode === 'enabled') {
-      document.body.classList.add('dark-mode');
-      document.getElementById('darkModeToggle').innerHTML = '🌙';
-    } else {
-      document.getElementById('darkModeToggle').innerHTML = '☀️';
-    }
-  }
-  
-  function toggleDarkMode() {
-    document.body.classList.toggle('dark-mode');
-    const isDark = document.body.classList.contains('dark-mode');
-    localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
-    document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
-  }
-
-  function updateDate() {
-    const now = new Date();
-    const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    document.getElementById('currentDate').innerHTML = `Hôm nay: ${vnNow.toLocaleDateString('vi-VN')}`;
-  }
-
-  // ========== REALTIME FUNCTIONS ==========
-  
-  // 1. Today Stats
-  db.collection('orders').onSnapshot((snapshot) => {
-    const today = getTodayVN();
-    const yesterday = getYesterdayVN();
-    let todayRevenue = 0, todayOrders = 0, yesterdayRevenue = 0, yesterdayOrders = 0;
-    
-    snapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      const orderDate = getDateFromDatetimeVN(order.datetime);
-      const total = order.total || 0;
-      if (orderDate === today) {
-        todayRevenue += total;
-        todayOrders++;
-      } else if (orderDate === yesterday) {
-        yesterdayRevenue += total;
-        yesterdayOrders++;
-      }
-    });
-    
-    document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
-    const revGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
-    const revEl = document.getElementById('revenueGrowth');
-    revEl.innerHTML = `${revGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revGrowth)}% so với hôm qua`;
-    revEl.style.color = revGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-
-    document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
-    const ordGrowth = calculateGrowth(todayOrders, yesterdayOrders);
-    const ordEl = document.getElementById('orderGrowth');
-    ordEl.innerHTML = `${ordGrowth >= 0 ? '▲' : '▼'} ${Math.abs(ordGrowth)} đơn`;
-    ordEl.style.color = ordGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-  });
-
-  // 2. Low Stock
-  db.collection('products').onSnapshot((snapshot) => {
-    let count = 0;
-    const products = [];
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      const stock = data.stock || 0;
-      if (stock < 10) {
-        count++;
-        products.push({ name: data.name || 'Sản phẩm', code: data.code || '---', stock });
-      }
-    });
-    allLowStockProducts = products.sort((a,b) => a.stock - b.stock);
-    document.getElementById('lowStockCount').innerHTML = count + ' mặt hàng';
-    const warnEl = document.getElementById('lowStockGrowth');
-    if (count > 0) {
-      warnEl.innerHTML = '⚠️ Cần nhập hàng';
-      warnEl.style.color = '#e74c3c';
-    } else {
-      warnEl.innerHTML = '✅ Đủ hàng';
-      warnEl.style.color = '#2a9d6e';
-    }
-
-    const preview = allLowStockProducts.slice(0, 4);
-    document.getElementById('lowstockPreviewList').innerHTML = preview.map(p => `
-      <li>
-        <span class="lowstock-name">${p.name}</span>
-        <span class="lowstock-stock ${p.stock < 5 ? 'stock-low' : 'stock-warning'}">còn ${p.stock}</span>
-      </li>
-    `).join('') || '<li style="text-align:center">🎉 Tất cả hàng đều đủ!</li>';
-  });
-
-  // 3. Refresh all charts when data changes
-  async function refreshAllCharts() {
-    const ordersSnapshot = await db.collection('orders').get();
-    
-    // Revenue 7 days chart
-    const labels7 = [];
-    const revenues7 = [];
-    for (let i = 6; i >= 0; i--) {
-      const now = new Date();
-      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      vnNow.setDate(vnNow.getDate() - i);
-      labels7.push(`${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`);
-      const dateStr = vnNow.toISOString().split('T')[0];
-      let daily = 0;
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        if (order.status === 'cancelled') return;
-        if (getDateFromDatetimeVN(order.datetime) === dateStr) daily += order.total || 0;
-      });
-      revenues7.push(daily);
-    }
-    
-    const ctx = document.getElementById('revenueChart').getContext('2d');
-    if (barChart) barChart.destroy();
-    barChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: labels7,
-        datasets: [
-          { label: 'Doanh thu', type: 'bar', data: revenues7, backgroundColor: '#2a9d6e', borderRadius: 8, barPercentage: 0.6, datalabels: { anchor: 'end', align: 'top', offset: 6, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 10, weight: 'bold' }, color: '#1a6d4c' } },
-          { label: 'Xu hướng', type: 'line', data: revenues7, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#e74c3c', fill: false, tension: 0.3, datalabels: { display: false } }
-        ]
-      },
-      options: { responsive: true, maintainAspectRatio: true, layout: { padding: { top: 28 } }, plugins: { legend: { position: 'top', labels: { font: { size: 10 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatMoney(ctx.raw)}` } }, datalabels: { display: true } }, scales: { y: { beginAtZero: true, grid: { display: false }, ticks: { callback: v => v.toLocaleString('vi-VN'), maxTicksLimit: 6 } }, x: { grid: { display: false } } } }
-    });
-
-    // Daily orders chart (5 days)
-    const labelsDaily = [];
-    const dailyOrdersData = [];
-    for (let i = 4; i >= 0; i--) {
-      const now = new Date();
-      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      vnNow.setDate(vnNow.getDate() - i);
-      labelsDaily.push(`${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`);
-      const dateStr = vnNow.toISOString().split('T')[0];
-      let count = 0;
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        if (order.status === 'cancelled') return;
-        if (getDateFromDatetimeVN(order.datetime) === dateStr) count++;
-      });
-      dailyOrdersData.push(count);
-    }
-    
-    const dailyCtx = document.getElementById('dailyOrdersChart').getContext('2d');
-    if (dailyOrdersChart) dailyOrdersChart.destroy();
-    dailyOrdersChart = new Chart(dailyCtx, {
-      type: 'bar',
-      data: { labels: labelsDaily, datasets: [{ label: 'Số đơn', data: dailyOrdersData, backgroundColor: '#3498db', borderRadius: 8, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v, font: { size: 9 } } }] },
-      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `Số đơn: ${ctx.raw} đơn` } } }, scales: { x: { grid: { display: false }, ticks: { stepSize: 1 } }, y: { grid: { display: false } } } }
-    });
-
-    // Donut chart
-    const categorySales = { 'Thuốc': 0, 'Vitamin': 0, 'Thực phẩm chức năng': 0, 'Thiết bị y tế': 0, 'Khác': 0 };
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      (order.items || []).forEach(item => {
-        const name = (item.name || '').toLowerCase();
-        let cat = 'Khác';
-        if (name.includes('paracetamol') || name.includes('amoxicillin') || name.includes('ibuprofen') || name.includes('thuốc')) cat = 'Thuốc';
-        else if (name.includes('vitamin') || name.includes('vit c')) cat = 'Vitamin';
-        else if (name.includes('glucosamine') || name.includes('curcumin') || name.includes('omega')) cat = 'Thực phẩm chức năng';
-        else if (name.includes('nhiệt kế') || name.includes('túi chườm')) cat = 'Thiết bị y tế';
-        categorySales[cat] += (item.price || 0) * (item.quantity || 1);
-      });
-    });
-    const donutCtx = document.getElementById('donutChart').getContext('2d');
-    if (donutChart) donutChart.destroy();
-    donutChart = new Chart(donutCtx, {
-      type: 'doughnut',
-      data: { labels: Object.keys(categorySales), datasets: [{ data: Object.values(categorySales), backgroundColor: ['#2a9d6e', '#f1c40f', '#3498db', '#9b59b6', '#e74c3c'], borderWidth: 0, hoverOffset: 8 }] },
-      options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.label}: ${formatMoney(ctx.raw)}` } } } }
-    });
-
-    // === SỬA LỖI SO SÁNH ===
-    // Lấy thời gian hiện tại theo VN
-    const now = new Date();
-    const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-    const currentYear = vnNow.getFullYear();
-    const currentMonth = vnNow.getMonth() + 1; // 1-12
-    const currentDay = vnNow.getDate();
-    
-    // Tính doanh thu hôm qua (đã có ở trên)
-    let yesterdayRevenue = 0;
-    const yesterday = getYesterdayVN();
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      if (getDateFromDatetimeVN(order.datetime) === yesterday) {
-        yesterdayRevenue += order.total || 0;
-      }
-    });
-    
-    // Tính doanh thu hôm nay
-    let todayRevenueTotal = 0;
-    const today = getTodayVN();
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      if (getDateFromDatetimeVN(order.datetime) === today) {
-        todayRevenueTotal += order.total || 0;
-      }
-    });
-    
-    // Tính doanh thu tuần này (7 ngày gần nhất, tính từ hôm nay lùi về 7 ngày)
-    let thisWeekRevenue = 0;
-    let lastWeekRevenue = 0;
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(vnNow);
-      date.setDate(currentDay - i);
-      const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
-      
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        if (order.status === 'cancelled') return;
-        if (getDateFromDatetimeVN(order.datetime) === dateStr) {
-          thisWeekRevenue += order.total || 0;
-        }
-      });
-    }
-    
-    // Tính doanh thu tuần trước (7 ngày trước đó)
-    for (let i = 7; i < 14; i++) {
-      const date = new Date(vnNow);
-      date.setDate(currentDay - i);
-      const dateStr = `${date.getFullYear()}-${(date.getMonth()+1).toString().padStart(2,'0')}-${date.getDate().toString().padStart(2,'0')}`;
-      
-      ordersSnapshot.forEach(doc => {
-        const order = doc.data();
-        if (order.status === 'cancelled') return;
-        if (getDateFromDatetimeVN(order.datetime) === dateStr) {
-          lastWeekRevenue += order.total || 0;
-        }
-      });
-    }
-    
-    // Tính doanh thu tháng này
-    let thisMonthRevenue = 0;
-    let lastMonthRevenue = 0;
-    
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      const orderDate = getDateFromDatetimeVN(order.datetime);
-      const [year, month, day] = orderDate.split('-').map(Number);
-      
-      if (year === currentYear && month === currentMonth) {
-        thisMonthRevenue += order.total || 0;
-      }
-      
-      // Tháng trước
-      let prevMonth = currentMonth - 1;
-      let prevYear = currentYear;
-      if (prevMonth === 0) {
-        prevMonth = 12;
-        prevYear = currentYear - 1;
-      }
-      if (year === prevYear && month === prevMonth) {
-        lastMonthRevenue += order.total || 0;
-      }
-    });
-    
-    // Cập nhật giao diện
-    const todayGrowth = calculateGrowth(todayRevenueTotal, yesterdayRevenue);
-    document.getElementById('todayGrowth').innerHTML = `${todayGrowth >= 0 ? '▲' : '▼'} ${Math.abs(todayGrowth)}%`;
-    document.getElementById('todayGrowth').style.color = todayGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-    
-    const weekGrowth = calculateGrowth(thisWeekRevenue, lastWeekRevenue);
-    document.getElementById('weekGrowth').innerHTML = `${weekGrowth >= 0 ? '▲' : '▼'} ${Math.abs(weekGrowth)}%`;
-    document.getElementById('weekGrowth').style.color = weekGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-    
-    const monthGrowth = calculateGrowth(thisMonthRevenue, lastMonthRevenue);
-    document.getElementById('monthGrowth').innerHTML = `${monthGrowth >= 0 ? '▲' : '▼'} ${Math.abs(monthGrowth)}%`;
-    document.getElementById('monthGrowth').style.color = monthGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-
-    // Top products
-    const productSales = {};
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      (order.items || []).forEach(item => {
-        const name = item.name;
-        const qty = item.quantity || 1;
-        productSales[name] = (productSales[name] || 0) + qty;
-      });
-    });
-    const sortedProducts = Object.entries(productSales).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    const totalProducts = sortedProducts.reduce((s, [,v]) => s + v, 0);
-    document.getElementById('topProductsList').innerHTML = sortedProducts.map(([name, qty], idx) => {
-      const percent = totalProducts > 0 ? (qty / totalProducts * 100).toFixed(0) : 0;
-      return `<li>
-        <span class="rank">${idx+1}</span>
-        <span class="item-name">${name.length > 25 ? name.slice(0,22)+'...' : name}</span>
-        <div class="bar-wrapper">
-          <div class="bar"><div class="bar-fill" style="width: ${percent}%; background: #f1c40f;"></div></div>
-          <span class="value">${qty} (${percent}%)</span>
-        </div>
-      </li>`;
-    }).join('');
-    if (sortedProducts.length === 0) document.getElementById('topProductsList').innerHTML = '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
-
-    // Top staff
-    const staffSales = {};
-    ordersSnapshot.forEach(doc => {
-      const order = doc.data();
-      if (order.status === 'cancelled') return;
-      let emp = order.employee || 'Nhân viên';
-      if (emp === 'undefined' || emp === 'Unknown') emp = 'Nhân viên';
-      staffSales[emp] = (staffSales[emp] || 0) + (order.total || 0);
-    });
-    const sortedStaff = Object.entries(staffSales).sort((a,b) => b[1] - a[1]).slice(0, 5);
-    const totalStaff = sortedStaff.reduce((s, [,v]) => s + v, 0);
-    document.getElementById('topStaffList').innerHTML = sortedStaff.map(([name, val], idx) => {
-      const percent = totalStaff > 0 ? (val / totalStaff * 100).toFixed(0) : 0;
-      return `<li>
-        <span class="rank">${idx+1}</span>
-        <span class="item-name">${name}</span>
-        <div class="bar-wrapper">
-          <div class="bar"><div class="bar-fill" style="width: ${percent}%; background: #2a9d6e;"></div></div>
-          <span class="value">${formatMoney(val)} (${percent}%)</span>
-        </div>
-      </li>`;
-    }).join('');
-    if (sortedStaff.length === 0) document.getElementById('topStaffList').innerHTML = '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
-  }
-
-  // Listen to orders changes
-  db.collection('orders').onSnapshot(() => refreshAllCharts());
-
-  // Modal functions
-  function showModal() {
-    const modalBody = document.getElementById('modalBody');
-    if (allLowStockProducts.length === 0) {
-      modalBody.innerHTML = '<p style="text-align:center">🎉 Tất cả hàng đều đủ!</p>';
-    } else {
-      modalBody.innerHTML = `
-        <table class="modal-table">
-          <thead><tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr></thead>
-          <tbody>
-            ${allLowStockProducts.map(p => `
-              <tr>
-                <td>${p.name}</td>
-                <td>${p.code}</td>
-                <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
-                <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <button class="view-more-btn" style="margin-top: 20px;" onclick="alert('🔜 Chức năng đang phát triển')">📦 Đi đến quản lý kho</button>
-      `;
-    }
-    document.getElementById('modal').classList.add('active');
-  }
-  
-  function closeModal() { 
-    document.getElementById('modal').classList.remove('active'); 
-  }
-  
-  function updateTimestamp() {
-    document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
-  }
-
-  // Initialize
-  initDarkMode();
-  document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
-  document.getElementById('viewMoreBtn').addEventListener('click', showModal);
-  document.querySelector('.close-modal').addEventListener('click', closeModal);
-  window.onclick = (e) => { if (e.target === document.getElementById('modal')) closeModal(); };
-
-  updateDate();
-  refreshAllCharts();
-  updateTimestamp();
-  setInterval(updateTimestamp, 1000);
-</script>
 </body>
 </html>
