@@ -74,10 +74,17 @@
     }
     
     // Tính % tăng trưởng so với hôm qua
-    function calculateGrowth(current, previous) {
-      if (!previous || previous === 0) return 0;
-      return ((current - previous) / previous * 100).toFixed(1);
-    }
+   function calculateGrowth(current, previous) {
+  // Nếu hôm qua = 0
+  if (!previous || previous === 0) {
+    // Hôm nay có giá trị > 0 → hiển thị +100%
+    if (current > 0) return 100;
+    // Cả hai đều 0 → hiển thị 0
+    return 0;
+  }
+  // Bình thường: tính %
+  return ((current - previous) / previous * 100).toFixed(1);
+}
     
     // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
     function getTodayVN() {
