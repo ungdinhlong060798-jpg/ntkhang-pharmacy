@@ -25,8 +25,8 @@
       --text-color: #1a3a2e;
       --border-color: #e8f0ec;
       --stat-number: #1a6d4c;
-      --shadow: 0 4px 20px rgba(0,0,0,0.06);
-      --shadow-hover: 0 8px 30px rgba(0,0,0,0.1);
+      --shadow: 0 4px 16px rgba(0,0,0,0.05);
+      --shadow-hover: 0 8px 24px rgba(0,0,0,0.1);
     }
 
     body.dark-mode {
@@ -35,8 +35,8 @@
       --text-color: #e0e0e0;
       --border-color: #2d2d44;
       --stat-number: #6ab04c;
-      --shadow: 0 4px 20px rgba(0,0,0,0.3);
-      --shadow-hover: 0 8px 30px rgba(0,0,0,0.4);
+      --shadow: 0 4px 16px rgba(0,0,0,0.3);
+      --shadow-hover: 0 8px 24px rgba(0,0,0,0.4);
     }
 
     html, body {
@@ -58,14 +58,14 @@
 
     .dashboard {
       width: 100%;
-      max-width: 1600px;
-      margin: 0 auto;
+      height: 100%;
+      max-width: 100%;
+      margin: 0;
       display: flex;
       flex-direction: column;
-      gap: 18px;
-      height: 100%;
+      gap: 16px;
       overflow-y: auto;
-      padding: 20px;
+      padding: 20px 24px;
       box-sizing: border-box;
     }
 
@@ -81,6 +81,7 @@
       border-radius: 10px;
     }
 
+    /* Header */
     .header {
       display: flex;
       align-items: center;
@@ -106,9 +107,6 @@
       border-radius: 30px;
       box-shadow: var(--shadow);
     }
-    body.dark-mode .date {
-      color: #aaa;
-    }
     .dark-mode-btn {
       background: var(--card-bg);
       border: none;
@@ -123,7 +121,6 @@
       transform: scale(1.05);
       box-shadow: var(--shadow-hover);
     }
-
     .realtime-badge {
       background: linear-gradient(135deg, #2a9d6e, #1a6d4c);
       color: white;
@@ -133,74 +130,69 @@
       animation: pulse 2s infinite;
       font-weight: 600;
     }
-
     @keyframes pulse {
       0% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0.4); }
       50% { opacity: 1; box-shadow: 0 0 0 4px rgba(42, 157, 110, 0); }
       100% { opacity: 0.7; box-shadow: 0 0 0 0 rgba(42, 157, 110, 0); }
     }
 
+    /* 3 KPI Cards - chiều cao cố định 120px */
     .kpi-row {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 18px;
+      gap: 20px;
       flex-shrink: 0;
     }
-
     .kpi-card {
       background: var(--card-bg);
       border-radius: 20px;
-      padding: 16px 20px;
+      padding: 18px 20px;
       box-shadow: var(--shadow);
       transition: all 0.3s ease;
+      height: 120px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
     }
     .kpi-card:hover {
       transform: translateY(-2px);
       box-shadow: var(--shadow-hover);
     }
-
     .kpi-card h3 {
       font-size: 14px;
       color: #5a6e66;
       margin-bottom: 8px;
       font-weight: 500;
     }
-    body.dark-mode .kpi-card h3 {
-      color: #aaa;
-    }
-
     .kpi-value {
-      font-size: 32px;
+      font-size: 28px;
       font-weight: 800;
       color: var(--stat-number);
       margin-bottom: 6px;
     }
-
     .kpi-growth {
-      font-size: 13px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
+      font-size: 12px;
     }
 
+    /* Hàng 2: Doanh thu 7 ngày (cao 360px) + So sánh */
     .row-2cols {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 18px;
+      grid-template-columns: 1.6fr 1fr;
+      gap: 20px;
       flex-shrink: 0;
     }
-
     .chart-card {
       background: var(--card-bg);
       border-radius: 20px;
       padding: 18px;
       box-shadow: var(--shadow);
       transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
     }
     .chart-card:hover {
       box-shadow: var(--shadow-hover);
     }
-
     .chart-card h3 {
       font-size: 16px;
       margin-bottom: 16px;
@@ -208,49 +200,41 @@
       font-weight: 600;
       border-left: 4px solid var(--stat-number);
       padding-left: 12px;
+      flex-shrink: 0;
     }
-
-    .chart-container {
-      width: 100%;
-      height: auto;
-      min-height: 280px;
-    }
-
     .revenue-chart-container {
+      flex: 1;
       min-height: 320px;
+      position: relative;
     }
-
-    canvas {
-      width: 100% !important;
-      height: auto !important;
-      max-height: 280px;
-    }
-
     .revenue-chart-container canvas {
-      max-height: 320px;
+      max-height: 320px !important;
     }
-
     .compare-content {
       display: flex;
       flex-direction: column;
       gap: 20px;
+      flex: 1;
     }
     .donut-container {
       width: 100%;
       max-width: 220px;
       margin: 0 auto;
+      flex-shrink: 0;
+    }
+    .donut-container canvas {
+      max-height: 180px !important;
     }
     .growth-stats {
       display: flex;
       flex-direction: column;
-      gap: 12px;
-      margin-top: 10px;
+      gap: 10px;
     }
     .growth-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 12px;
+      padding: 10px 14px;
       background: var(--bg-color);
       border-radius: 12px;
       font-size: 14px;
@@ -263,14 +247,14 @@
       color: #2a9d6e;
     }
 
+    /* Hàng 3 + 4: 2 cột cân bằng */
     .row-3cols {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 18px;
+      gap: 20px;
       flex: 1;
       min-height: 0;
     }
-
     .left-card, .right-card {
       background: var(--card-bg);
       border-radius: 20px;
@@ -281,7 +265,9 @@
       min-height: 0;
       transition: all 0.3s ease;
     }
-
+    .left-card:hover, .right-card:hover {
+      box-shadow: var(--shadow-hover);
+    }
     .left-card h3, .right-card h3 {
       font-size: 16px;
       margin-bottom: 14px;
@@ -291,13 +277,16 @@
       padding-left: 12px;
       flex-shrink: 0;
     }
-
     .left-container, .right-container {
       flex: 1;
       min-height: 0;
       overflow-y: auto;
     }
+    .left-container canvas {
+      max-height: 200px !important;
+    }
 
+    /* Danh sách với thanh bar */
     .list-with-bar {
       list-style: none;
     }
@@ -349,6 +338,7 @@
       color: var(--stat-number);
     }
 
+    /* Thuốc sắp hết */
     .lowstock-list {
       list-style: none;
       margin-bottom: 16px;
@@ -385,6 +375,7 @@
       transition: all 0.2s;
       width: 100%;
       text-align: center;
+      margin-top: auto;
     }
     .view-more-btn:hover {
       background: var(--stat-number);
@@ -392,6 +383,7 @@
       border-color: var(--stat-number);
     }
 
+    /* Modal */
     .modal {
       display: none;
       position: fixed;
@@ -454,16 +446,24 @@
 
     .update-time {
       text-align: center;
-      margin-top: 10px;
+      margin-top: 8px;
       color: #8aa99e;
       font-size: 12px;
       flex-shrink: 0;
     }
 
-    @media (max-width: 1100px) {
-      .row-2cols, .row-3cols { grid-template-columns: 1fr; gap: 16px; }
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .dashboard { padding: 16px; gap: 14px; }
       .kpi-value { font-size: 24px; }
-      .dashboard { padding: 16px; gap: 16px; }
+      .kpi-card { height: 110px; padding: 14px 16px; }
+      .revenue-chart-container { min-height: 280px; }
+      .revenue-chart-container canvas { max-height: 280px !important; }
+    }
+    @media (max-width: 900px) {
+      .row-2cols, .row-3cols { grid-template-columns: 1fr; gap: 14px; }
+      .kpi-row { gap: 12px; }
+      .dashboard { padding: 12px; }
     }
   </style>
 </head>
@@ -478,6 +478,7 @@
     <button class="dark-mode-btn" id="darkModeToggle">☀️</button>
   </div>
 
+  <!-- 3 KPI -->
   <div class="kpi-row">
     <div class="kpi-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
@@ -496,10 +497,11 @@
     </div>
   </div>
 
+  <!-- Hàng 2 -->
   <div class="row-2cols">
     <div class="chart-card">
       <h3>📊 DOANH THU 7 NGÀY</h3>
-      <div class="chart-container revenue-chart-container">
+      <div class="revenue-chart-container">
         <canvas id="revenueChart"></canvas>
       </div>
     </div>
@@ -518,6 +520,7 @@
     </div>
   </div>
 
+  <!-- Hàng 3 -->
   <div class="row-3cols">
     <div class="left-card">
       <h3>📊 ĐƠN HÀNG THEO NGÀY</h3>
@@ -535,6 +538,7 @@
     </div>
   </div>
 
+  <!-- Hàng 4 -->
   <div class="row-3cols">
     <div class="left-card">
       <h3>👩‍⚕️ TOP NHÂN VIÊN BÁN TỐT</h3>
@@ -558,6 +562,7 @@
   <div class="update-time" id="updateTime"></div>
 </div>
 
+<!-- Modal -->
 <div id="modal" class="modal">
   <div class="modal-content">
     <div class="modal-header">
@@ -569,7 +574,6 @@
 </div>
 
 <script>
-  // Firebase config
   const firebaseConfig = {
     apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
     authDomain: "ntkhang-pharmacy.firebaseapp.com",
@@ -582,7 +586,6 @@
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
 
-  // Helper functions
   function formatMoney(amount) {
     if (!amount && amount !== 0) return '0 ₫';
     return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
@@ -620,7 +623,6 @@
     return ((current - previous) / previous * 100).toFixed(1);
   }
 
-  // Charts
   let barChart = null, donutChart = null, dailyOrdersChart = null;
   let allLowStockProducts = [];
 
@@ -641,14 +643,13 @@
     document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
   }
 
-  // Update date
   function updateDate() {
     const now = new Date();
     const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
     document.getElementById('currentDate').innerHTML = `Hôm nay: ${vnNow.toLocaleDateString('vi-VN')}`;
   }
 
-  // Listen today stats
+  // Today stats
   function listenTodayStats() {
     db.collection('orders').onSnapshot((snapshot) => {
       const today = getTodayVN();
@@ -671,19 +672,19 @@
       
       document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
       const revGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
-      const revGrowthEl = document.getElementById('revenueGrowth');
-      revGrowthEl.innerHTML = `${revGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revGrowth)}% so với hôm qua`;
-      revGrowthEl.style.color = revGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+      const revEl = document.getElementById('revenueGrowth');
+      revEl.innerHTML = `${revGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revGrowth)}% so với hôm qua`;
+      revEl.style.color = revGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
 
       document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
       const ordGrowth = calculateGrowth(todayOrders, yesterdayOrders);
-      const ordGrowthEl = document.getElementById('orderGrowth');
-      ordGrowthEl.innerHTML = `${ordGrowth >= 0 ? '▲' : '▼'} ${Math.abs(ordGrowth)} đơn`;
-      ordGrowthEl.style.color = ordGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+      const ordEl = document.getElementById('orderGrowth');
+      ordEl.innerHTML = `${ordGrowth >= 0 ? '▲' : '▼'} ${Math.abs(ordGrowth)} đơn`;
+      ordEl.style.color = ordGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
     });
   }
 
-  // Listen low stock
+  // Low stock
   function listenLowStock() {
     db.collection('products').onSnapshot((snapshot) => {
       let count = 0;
@@ -698,27 +699,26 @@
       });
       allLowStockProducts = products.sort((a,b) => a.stock - b.stock);
       document.getElementById('lowStockCount').innerHTML = count + ' mặt hàng';
-      const warningEl = document.getElementById('lowStockGrowth');
+      const warnEl = document.getElementById('lowStockGrowth');
       if (count > 0) {
-        warningEl.innerHTML = '⚠️ Cần nhập hàng';
-        warningEl.style.color = '#e74c3c';
+        warnEl.innerHTML = '⚠️ Cần nhập hàng';
+        warnEl.style.color = '#e74c3c';
       } else {
-        warningEl.innerHTML = '✅ Đủ hàng';
-        warningEl.style.color = '#2a9d6e';
+        warnEl.innerHTML = '✅ Đủ hàng';
+        warnEl.style.color = '#2a9d6e';
       }
 
       const preview = allLowStockProducts.slice(0, 4);
-      const previewHtml = preview.map(p => `
+      document.getElementById('lowstockPreviewList').innerHTML = preview.map(p => `
         <li>
           <span class="lowstock-name">${p.name}</span>
           <span class="lowstock-stock ${p.stock < 5 ? 'stock-low' : 'stock-warning'}">còn ${p.stock}</span>
         </li>
-      `).join('');
-      document.getElementById('lowstockPreviewList').innerHTML = previewHtml || '<li style="text-align:center">🎉 Tất cả hàng đều đủ!</li>';
+      `).join('') || '<li style="text-align:center">🎉 Tất cả hàng đều đủ!</li>';
     });
   }
 
-  // Revenue 7 days chart
+  // Revenue 7 days
   async function loadRevenue7Days() {
     const labels = [], revenues = [];
     for (let i = 6; i >= 0; i--) {
@@ -736,10 +736,6 @@
       });
       revenues.push(daily);
     }
-    drawBarChart(labels, revenues);
-  }
-
-  function drawBarChart(labels, values) {
     const ctx = document.getElementById('revenueChart').getContext('2d');
     if (barChart) barChart.destroy();
     barChart = new Chart(ctx, {
@@ -747,8 +743,8 @@
       data: {
         labels: labels,
         datasets: [
-          { label: 'Doanh thu', type: 'bar', data: values, backgroundColor: '#2a9d6e', borderRadius: 8, barPercentage: 0.6, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 9 } } },
-          { label: 'Xu hướng', type: 'line', data: values, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#e74c3c', fill: false, tension: 0.3, datalabels: { display: false } }
+          { label: 'Doanh thu', type: 'bar', data: revenues, backgroundColor: '#2a9d6e', borderRadius: 8, barPercentage: 0.6, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 9 } } },
+          { label: 'Xu hướng', type: 'line', data: revenues, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 3, pointBackgroundColor: '#e74c3c', fill: false, tension: 0.3, datalabels: { display: false } }
         ]
       },
       options: { responsive: true, maintainAspectRatio: true, layout: { padding: { top: 20 } }, plugins: { legend: { position: 'top', labels: { font: { size: 10 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatMoney(ctx.raw)}` } } }, scales: { y: { beginAtZero: true, grid: { display: false }, ticks: { callback: v => v.toLocaleString('vi-VN'), maxTicksLimit: 6 } }, x: { grid: { display: false } } } }
@@ -811,7 +807,7 @@
     document.getElementById('monthGrowth').innerHTML = `${calculateGrowth(monthRev, lastMonthRev) >= 0 ? '▲' : '▼'} ${Math.abs(calculateGrowth(monthRev, lastMonthRev))}%`;
   }
 
-  // Daily orders chart
+  // Daily orders
   async function loadDailyOrders() {
     const labels = [], orders = [];
     for (let i = 4; i >= 0; i--) {
@@ -853,7 +849,7 @@
     });
     const sorted = Object.entries(sales).sort((a,b) => b[1] - a[1]).slice(0, 5);
     const total = sorted.reduce((s, [,v]) => s + v, 0);
-    const html = sorted.map(([name, qty], idx) => {
+    document.getElementById('topProductsList').innerHTML = sorted.map(([name, qty], idx) => {
       const percent = total > 0 ? (qty / total * 100).toFixed(0) : 0;
       return `<li>
         <span class="rank">${idx+1}</span>
@@ -864,7 +860,7 @@
         </div>
       </li>`;
     }).join('');
-    document.getElementById('topProductsList').innerHTML = html || '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
+    if (sorted.length === 0) document.getElementById('topProductsList').innerHTML = '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
   }
 
   // Top staff
@@ -880,7 +876,7 @@
     });
     const sorted = Object.entries(staffSales).sort((a,b) => b[1] - a[1]).slice(0, 5);
     const total = sorted.reduce((s, [,v]) => s + v, 0);
-    const html = sorted.map(([name, val], idx) => {
+    document.getElementById('topStaffList').innerHTML = sorted.map(([name, val], idx) => {
       const percent = total > 0 ? (val / total * 100).toFixed(0) : 0;
       return `<li>
         <span class="rank">${idx+1}</span>
@@ -891,7 +887,7 @@
         </div>
       </li>`;
     }).join('');
-    document.getElementById('topStaffList').innerHTML = html || '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
+    if (sorted.length === 0) document.getElementById('topStaffList').innerHTML = '<li style="text-align:center">📭 Chưa có dữ liệu</li>';
   }
 
   // Modal
