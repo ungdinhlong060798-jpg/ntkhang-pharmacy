@@ -156,6 +156,7 @@
       const [editingStaff, setEditingStaff] = useState(null);
       const [editPin, setEditPin] = useState('');
       const [editingProduct, setEditingProduct] = useState(null);
+      const [showMobileCart, setShowMobileCart] = useState(false);
       const [editProductError, setEditProductError] = useState('');
       const chartRef1 = useRef(); const chartRef2 = useRef();
       const chart1 = useRef(); const chart2 = useRef();
@@ -539,7 +540,8 @@
             {/* POS View */}
             {view === 'pos' && (
               <div style={{display:'grid',gridTemplateColumns: isMobile ? '1fr' : '2fr 1fr',gap:'0.75rem'}}>
-                <div>
+                {/* Product Grid */}
+                <div style={{paddingBottom: isMobile ? '5rem' : '0'}}>
                   <div className="glass" style={{borderRadius:'1rem',padding:'0.75rem',marginBottom:'0.75rem'}}>
                     <input type="text" placeholder={`🔍 Tìm ${products.length} sản phẩm...`} value={search} onChange={e=>setSearch(e.target.value)} style={{fontSize:'1rem'}} />
                   </div>
@@ -558,7 +560,7 @@
                               <p style={{margin:0,fontSize:'1.1rem',fontWeight:'bold',color:'#047857'}}>{p.price?.toLocaleString()}₫</p>
                               <p style={{margin:0,fontSize:'0.75rem',fontWeight:'600',color: isOut ? '#ef4444' : isLow ? '#f97316' : '#9ca3af'}}>Còn: {p.stock}</p>
                             </div>
-                            <button className="btn" style={{padding:'0.4rem 0.75rem',fontSize:'1.2rem',lineHeight:1}} disabled={isOut}>+</button>
+                            <button className="btn" style={{padding:'0.5rem 0.9rem',fontSize:'1.3rem',lineHeight:1,minWidth:'2.5rem',minHeight:'2.5rem'}} disabled={isOut}>+</button>
                           </div>
                         </div>
                       );
@@ -566,39 +568,97 @@
                   </div>
                 </div>
 
-                {/* Cart */}
-                <div className="glass" style={{borderRadius:'1rem',padding:'1rem',position: isMobile ? 'relative' : 'sticky',top:'5rem',height:'fit-content'}}>
-                  <h2 style={{margin:'0 0 0.75rem',fontSize:'1rem'}}>🛒 Giỏ hàng ({cart.length})</h2>
-                  <div style={{maxHeight: isMobile ? '12rem' : '20rem',overflowY:'auto',marginBottom:'0.75rem'}}>
-                    {cart.length === 0
-                      ? <p style={{textAlign:'center',color:'#9ca3af',padding:'1.5rem 0',fontSize:'0.875rem'}}>Chưa có sản phẩm</p>
-                      : cart.map(i => (
-                        <div key={i.code} style={{background:'#f9fafb',borderRadius:'0.5rem',padding:'0.6rem',marginBottom:'0.4rem'}}>
-                          <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.4rem'}}>
-                            <span style={{fontWeight:'600',fontSize:'0.8rem',flex:1,paddingRight:'0.5rem'}}>{i.name}</span>
-                            <button onClick={()=>removeItem(i.code)} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:'1.1rem',padding:0,lineHeight:1}}>×</button>
-                          </div>
-                          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                            <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
-                              <button onClick={()=>updateQty(i.code,-1)} style={{background:'#e5e7eb',border:'none',borderRadius:'0.25rem',padding:'0.2rem 0.5rem',cursor:'pointer',fontSize:'1rem',lineHeight:1}}>-</button>
-                              <span style={{fontWeight:'700',minWidth:'1.5rem',textAlign:'center'}}>{i.quantity}</span>
-                              <button onClick={()=>updateQty(i.code,1)} style={{background:'#d1fae5',border:'none',borderRadius:'0.25rem',padding:'0.2rem 0.5rem',cursor:'pointer',color:'#047857',fontSize:'1rem',lineHeight:1}}>+</button>
+                {/* Desktop Cart (sidebar) */}
+                {!isMobile && (
+                  <div className="glass" style={{borderRadius:'1rem',padding:'1rem',position:'sticky',top:'5rem',height:'fit-content'}}>
+                    <h2 style={{margin:'0 0 0.75rem',fontSize:'1rem'}}>🛒 Giỏ hàng ({cart.length})</h2>
+                    <div style={{maxHeight:'20rem',overflowY:'auto',marginBottom:'0.75rem'}}>
+                      {cart.length === 0
+                        ? <p style={{textAlign:'center',color:'#9ca3af',padding:'1.5rem 0',fontSize:'0.875rem'}}>Chưa có sản phẩm</p>
+                        : cart.map(i => (
+                          <div key={i.code} style={{background:'#f9fafb',borderRadius:'0.5rem',padding:'0.6rem',marginBottom:'0.4rem'}}>
+                            <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.4rem'}}>
+                              <span style={{fontWeight:'600',fontSize:'0.8rem',flex:1,paddingRight:'0.5rem'}}>{i.name}</span>
+                              <button onClick={()=>removeItem(i.code)} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:'1.1rem',padding:0,lineHeight:1}}>×</button>
                             </div>
-                            <span style={{fontWeight:'bold',color:'#047857',fontSize:'0.875rem'}}>{(i.price*i.quantity).toLocaleString()}₫</span>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                              <div style={{display:'flex',gap:'0.4rem',alignItems:'center'}}>
+                                <button onClick={()=>updateQty(i.code,-1)} style={{background:'#e5e7eb',border:'none',borderRadius:'0.25rem',padding:'0.3rem 0.6rem',cursor:'pointer',fontSize:'1rem',lineHeight:1}}>-</button>
+                                <span style={{fontWeight:'700',minWidth:'1.5rem',textAlign:'center'}}>{i.quantity}</span>
+                                <button onClick={()=>updateQty(i.code,1)} style={{background:'#d1fae5',border:'none',borderRadius:'0.25rem',padding:'0.3rem 0.6rem',cursor:'pointer',color:'#047857',fontSize:'1rem',lineHeight:1}}>+</button>
+                              </div>
+                              <span style={{fontWeight:'bold',color:'#047857',fontSize:'0.875rem'}}>{(i.price*i.quantity).toLocaleString()}₫</span>
+                            </div>
                           </div>
-                        </div>
-                      ))
-                    }
-                  </div>
-                  <div style={{borderTop:'2px solid #e5e7eb',paddingTop:'0.75rem'}}>
-                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.75rem'}}>
-                      <span style={{fontWeight:'600'}}>Tổng:</span>
-                      <span style={{fontSize:'1.5rem',fontWeight:'bold',color:'#047857'}}>{total.toLocaleString()}₫</span>
+                        ))
+                      }
                     </div>
-                    <div style={{marginBottom:'0.75rem',padding:'0.5rem 0.75rem',background:'#f0fdf4',borderRadius:'0.5rem',fontSize:'0.85rem',color:'#047857',fontWeight:'600'}}>
+                    <div style={{borderTop:'2px solid #e5e7eb',paddingTop:'0.75rem'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.75rem'}}>
+                        <span style={{fontWeight:'600'}}>Tổng:</span>
+                        <span style={{fontSize:'1.5rem',fontWeight:'bold',color:'#047857'}}>{total.toLocaleString()}₫</span>
+                      </div>
+                      <div style={{marginBottom:'0.75rem',padding:'0.5rem 0.75rem',background:'#f0fdf4',borderRadius:'0.5rem',fontSize:'0.85rem',color:'#047857',fontWeight:'600'}}>
+                        👤 {currentUser?.name} ({currentUser?.role === 'manager' ? 'Quản lý' : 'Nhân viên'})
+                      </div>
+                      <button onClick={checkout} disabled={cart.length===0||syncing} className="btn" style={{width:'100%',fontSize:'1rem'}}>
+                        {syncing ? '⏳ Đang xử lý...' : '✅ Hoàn tất đơn hàng'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Mobile floating cart button */}
+            {isMobile && view === 'pos' && cart.length > 0 && (
+              <div style={{position:'fixed',bottom:'5.5rem',left:'1rem',right:'1rem',zIndex:60}}>
+                <button onClick={()=>setShowMobileCart(true)} className="btn"
+                  style={{width:'100%',padding:'1rem',fontSize:'1rem',borderRadius:'1rem',display:'flex',justifyContent:'space-between',alignItems:'center',boxShadow:'0 8px 24px rgba(16,185,129,0.4)'}}>
+                  <span>🛒 {cart.length} sản phẩm</span>
+                  <span style={{fontSize:'1.2rem',fontWeight:'bold'}}>{total.toLocaleString()}₫ →</span>
+                </button>
+              </div>
+            )}
+
+            {/* Mobile Cart Drawer */}
+            {isMobile && showMobileCart && (
+              <div style={{position:'fixed',inset:0,zIndex:150}} onClick={()=>setShowMobileCart(false)}>
+                <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.4)'}}/>
+                <div onClick={e=>e.stopPropagation()}
+                  style={{position:'absolute',bottom:0,left:0,right:0,background:'white',borderRadius:'1.5rem 1.5rem 0 0',padding:'1.25rem',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 -8px 32px rgba(0,0,0,0.15)'}}>
+                  {/* Drag handle */}
+                  <div style={{width:'3rem',height:'4px',background:'#e5e7eb',borderRadius:'999px',margin:'0 auto 1rem'}}/>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1rem'}}>
+                    <h2 style={{margin:0,fontSize:'1.1rem',fontWeight:'bold'}}>🛒 Giỏ hàng ({cart.length})</h2>
+                    <button onClick={()=>setShowMobileCart(false)} style={{background:'#f3f4f6',border:'none',borderRadius:'50%',width:'2rem',height:'2rem',cursor:'pointer',fontSize:'1rem',fontWeight:'bold',color:'#6b7280'}}>×</button>
+                  </div>
+                  {cart.map(i => (
+                    <div key={i.code} style={{background:'#f9fafb',borderRadius:'0.75rem',padding:'0.75rem',marginBottom:'0.5rem'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.5rem'}}>
+                        <span style={{fontWeight:'600',fontSize:'0.9rem',flex:1,paddingRight:'0.5rem'}}>{i.name}</span>
+                        <button onClick={()=>removeItem(i.code)} style={{background:'none',border:'none',color:'#ef4444',cursor:'pointer',fontSize:'1.3rem',padding:0,lineHeight:1,minWidth:'2rem',minHeight:'2rem'}}>×</button>
+                      </div>
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <div style={{display:'flex',gap:'0.5rem',alignItems:'center'}}>
+                          <button onClick={()=>updateQty(i.code,-1)} style={{background:'#e5e7eb',border:'none',borderRadius:'0.5rem',padding:'0.4rem 0.8rem',cursor:'pointer',fontSize:'1.1rem',lineHeight:1,minWidth:'2.5rem',minHeight:'2.5rem'}}>-</button>
+                          <span style={{fontWeight:'700',minWidth:'2rem',textAlign:'center',fontSize:'1.1rem'}}>{i.quantity}</span>
+                          <button onClick={()=>updateQty(i.code,1)} style={{background:'#d1fae5',border:'none',borderRadius:'0.5rem',padding:'0.4rem 0.8rem',cursor:'pointer',color:'#047857',fontSize:'1.1rem',lineHeight:1,minWidth:'2.5rem',minHeight:'2.5rem'}}>+</button>
+                        </div>
+                        <span style={{fontWeight:'bold',color:'#047857',fontSize:'1rem'}}>{(i.price*i.quantity).toLocaleString()}₫</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{borderTop:'2px solid #e5e7eb',paddingTop:'1rem',marginTop:'0.5rem'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'0.75rem',alignItems:'center'}}>
+                      <span style={{fontWeight:'700',fontSize:'1rem'}}>Tổng tiền:</span>
+                      <span style={{fontSize:'1.75rem',fontWeight:'bold',color:'#047857'}}>{total.toLocaleString()}₫</span>
+                    </div>
+                    <div style={{marginBottom:'1rem',padding:'0.6rem 0.75rem',background:'#f0fdf4',borderRadius:'0.5rem',fontSize:'0.875rem',color:'#047857',fontWeight:'600'}}>
                       👤 {currentUser?.name} ({currentUser?.role === 'manager' ? 'Quản lý' : 'Nhân viên'})
                     </div>
-                    <button onClick={checkout} disabled={cart.length===0||syncing} className="btn" style={{width:'100%',fontSize:'1rem'}}>
+                    <button onClick={()=>{checkout();setShowMobileCart(false);}} disabled={cart.length===0||syncing} className="btn"
+                      style={{width:'100%',fontSize:'1.1rem',padding:'1rem',borderRadius:'0.75rem'}}>
                       {syncing ? '⏳ Đang xử lý...' : '✅ Hoàn tất đơn hàng'}
                     </button>
                   </div>
