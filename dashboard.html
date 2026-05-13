@@ -8,7 +8,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
-  <!-- Firebase SDK (phiên bản cũ ổn định) -->
+  <!-- Firebase SDK (phiên bản COMPAT - ổn định nhất) -->
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
   
@@ -377,6 +377,37 @@
       flex-shrink: 0;
     }
 
+    .loading-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.7);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      color: white;
+      font-size: 18px;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .loading-overlay.hidden {
+      display: none;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #fff;
+      border-top-color: #2a9d6e;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     @media (max-width: 900px) {
       .row-2-charts, .row-3-charts, .bottom-row-2 { grid-template-columns: 1fr; gap: 10px; }
       .stat-number { font-size: 20px; }
@@ -395,6 +426,11 @@
   </style>
 </head>
 <body>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <div>Đang tải dữ liệu từ Firebase...</div>
+</div>
+
 <div class="dashboard">
   <div class="header">
     <div></div>
@@ -465,10 +501,10 @@
       <div class="lowstock-table-wrapper">
         <table id="lowStockDetailTable">
           <thead>
-            <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+            <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></table>
           </thead>
           <tbody>
-            <tr><td colspan="4">Đang tải...</td></tr>
+            <tr><td colspan="4">Đang tải...</td>
           </tbody>
         </table>
       </div>
@@ -495,6 +531,8 @@
   // Initialize Firebase
   firebase.initializeApp(firebaseConfig);
   const db = firebase.firestore();
+  
+  console.log('Firebase đã khởi tạo');
 
   // Helper functions
   function formatMoney(amount) {
@@ -558,6 +596,15 @@
   // Charts
   let barChart = null, compareChart = null, dailyOrdersChart = null, horizontalBarChart = null;
 
+  // Kiểm tra kết nối Firebase
+  db.collection('orders').get().then(() => {
+    console.log('✅ Kết nối Firebase thành công');
+    document.getElementById('loadingOverlay').classList.add('hidden');
+  }).catch((error) => {
+    console.error('❌ Lỗi kết nối Firebase:', error);
+    document.getElementById('loadingOverlay').innerHTML = '<div style="background:#e74c3c; padding:20px; border-radius:10px;">❌ Lỗi kết nối Firebase! Vui lòng kiểm tra cấu hình.</div>';
+  });
+
   // Today stats
   db.collection('orders').onSnapshot((snapshot) => {
     const today = getTodayVN();
@@ -589,6 +636,8 @@
     const ordEl = document.getElementById('orderGrowth');
     ordEl.innerHTML = `${ordGrowth >= 0 ? '▲' : '▼'} ${Math.abs(ordGrowth)}%`;
     ordEl.style.color = ordGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+    
+    console.log(`📊 Hôm nay: ${todayOrders} đơn, ${formatMoney(todayRevenue)}`);
   });
 
   // Low stock count
@@ -644,7 +693,8 @@
           <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
         </thead>
         <tbody>
-          <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+          <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
+          </tr>
         </tbody>
       `;
     }
