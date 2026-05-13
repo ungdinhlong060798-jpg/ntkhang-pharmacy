@@ -8,763 +8,10 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
   
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js';
-    import { 
-      getFirestore, 
-      collection, 
-      query, 
-      where, 
-      getDocs, 
-      orderBy, 
-      limit,
-      onSnapshot
-    } from 'https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js';
-    
-    // Đăng ký plugin datalabels
-    Chart.register(ChartDataLabels);
-    
-    // ========== FIREBASE CONFIG ==========
-    const firebaseConfig = {
-      apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
-      authDomain: "ntkhang-pharmacy.firebaseapp.com",
-      projectId: "ntkhang-pharmacy",
-      storageBucket: "ntkhang-pharmacy.firebasestorage.app",
-      messagingSenderId: "366824735651",
-      appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
-    };
-    
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    
-    // ========== DARK MODE ==========
-    function initDarkMode() {
-      const savedMode = localStorage.getItem('darkMode');
-      if (savedMode === 'enabled') {
-        document.body.classList.add('dark-mode');
-        document.getElementById('darkModeToggle').innerHTML = '🌙';
-      } else {
-        document.getElementById('darkModeToggle').innerHTML = '☀️';
-      }
-    }
-    
-    function toggleDarkMode() {
-      document.body.classList.toggle('dark-mode');
-      const isDark = document.body.classList.contains('dark-mode');
-      localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
-      document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
-      setTimeout(() => {
-        loadRevenue7Days();
-        loadCompareRevenue();
-        loadDailyOrdersChart();
-      }, 100);
-    }
-    
-    // ========== HÀM TIỆN ÍCH ==========
-    function formatMoney(amount) {
-      if (!amount && amount !== 0) return '0 ₫';
-      return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
-    }
-    
-    function formatMoneyShort(amount) {
-      if (!amount && amount !== 0) return '0₫';
-      if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'tr';
-      if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k';
-      return Math.round(amount).toLocaleString('vi-VN') + '₫';
-    }
-    
-    // Tính % tăng trưởng so với hôm qua
-   function calculateGrowth(current, previous) {
-  // Nếu hôm qua = 0
-  if (!previous || previous === 0) {
-    // Hôm nay có giá trị > 0 → hiển thị +100%
-    if (current > 0) return 100;
-    // Cả hai đều 0 → hiển thị 0
-    return 0;
-  }
-  // Bình thường: tính %
-  return ((current - previous) / previous * 100).toFixed(1);
-}
-    
-    // ========== XỬ LÝ MÚI GIỜ VIỆT NAM (UTC+7) ==========
-    function getTodayVN() {
-      const now = new Date();
-      const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      return vnDate.toISOString().split('T')[0];
-    }
-    
-    function getYesterdayVN() {
-      const now = new Date();
-      const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      vnDate.setDate(vnDate.getDate() - 1);
-      return vnDate.toISOString().split('T')[0];
-    }
-    
-    function getDateFromDatetimeVN(datetimeStr) {
-      if (!datetimeStr) return null;
-      const utcDate = new Date(datetimeStr);
-      const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
-      return vnDate.toISOString().split('T')[0];
-    }
-    
-    let barChart = null;
-    let compareChart = null;
-    let dailyOrdersChart = null;
-    let horizontalBarChart = null;
-    
-    // ========== 1. REALTIME: DOANH THU & SỐ ĐƠN HÔM NAY (có % tăng trưởng) ==========
-    function listenTodayStats() {
-      const ordersRef = collection(db, 'orders');
-      const todayVN = getTodayVN();
-      const yesterdayVN = getYesterdayVN();
-      
-      onSnapshot(ordersRef, (snapshot) => {
-        let todayRevenue = 0;
-        let todayOrders = 0;
-        let yesterdayRevenue = 0;
-        let yesterdayOrders = 0;
-        
-        snapshot.forEach(doc => {
-          const order = doc.data();
-          if (order.status === 'cancelled') return;
-          
-          const orderDate = getDateFromDatetimeVN(order.datetime);
-          const total = order.total || 0;
-          
-          if (orderDate === todayVN) {
-            todayRevenue += total;
-            todayOrders++;
-          } else if (orderDate === yesterdayVN) {
-            yesterdayRevenue += total;
-            yesterdayOrders++;
-          }
-        });
-        
-        // Cập nhật doanh thu hôm nay
-        const revenueGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
-        document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
-        document.getElementById('revenueGrowth').innerHTML = `${revenueGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revenueGrowth)}% vs hôm qua`;
-        document.getElementById('revenueGrowth').style.color = revenueGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-        
-        // Cập nhật số đơn hôm nay
-        const orderGrowth = calculateGrowth(todayOrders, yesterdayOrders);
-        document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
-        document.getElementById('orderGrowth').innerHTML = `${orderGrowth >= 0 ? '▲' : '▼'} ${Math.abs(orderGrowth)}%`;
-        document.getElementById('orderGrowth').style.color = orderGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
-      });
-    }
-    
-    // ========== 2. REALTIME: SỐ SẢN PHẨM SẮP HẾT ==========
-    function listenLowStockCount() {
-      const productsRef = collection(db, 'products');
-      
-      onSnapshot(productsRef, (snapshot) => {
-        let lowStockCount = 0;
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const stock = data.stock || 0;
-          if (stock < 10) {
-            lowStockCount++;
-          }
-        });
-        
-        document.getElementById('lowStockCount').innerHTML = lowStockCount + ' sản phẩm';
-        const warningEl = document.getElementById('lowStockWarning');
-        if (lowStockCount > 0) {
-          warningEl.innerHTML = '⚠️ Cần nhập hàng!';
-          warningEl.style.color = '#e74c3c';
-        } else {
-          warningEl.innerHTML = '✅ Đủ hàng';
-          warningEl.style.color = '#2a9d6e';
-        }
-      });
-    }
-    
-    // ========== 3. REALTIME: TOP NHÂN VIÊN BÁN TỐT ==========
-    function listenTopStaff() {
-      const ordersRef = collection(db, 'orders');
-      
-      onSnapshot(ordersRef, (snapshot) => {
-        const staffSales = {};
-        
-        snapshot.forEach(doc => {
-          const order = doc.data();
-          if (order.status === 'cancelled') return;
-          
-          let employee = order.employee;
-          if (!employee || employee === 'undefined' || employee === 'Unknown' || employee === '') {
-            employee = 'Nhân viên';
-          }
-          const total = order.total || 0;
-          
-          if (staffSales[employee]) {
-            staffSales[employee] += total;
-          } else {
-            staffSales[employee] = total;
-          }
-        });
-        
-        const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
-        staffArray.sort((a, b) => b.total - a.total);
-        const topStaff = staffArray.slice(0, 5);
-        
-        if (topStaff.length > 0) {
-          document.getElementById('topStaffList').innerHTML = topStaff.map((staff, idx) => `
-            <li>
-              <span class="staff-name">${idx + 1}. ${staff.name}</span>
-              <span class="staff-amount">${formatMoney(staff.total)}</span>
-            </li>
-          `).join('');
-        } else {
-          document.getElementById('topStaffList').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
-        }
-      });
-    }
-    
-    // ========== 4. REALTIME: TOP 5 SẢN PHẨM BÁN CHẠY ==========
-    function listenTopProductsHorizontal() {
-      const ordersRef = collection(db, 'orders');
-      
-      onSnapshot(ordersRef, (snapshot) => {
-        const productSales = {};
-        
-        snapshot.forEach(doc => {
-          const order = doc.data();
-          if (order.status === 'cancelled') return;
-          
-          const items = order.items || [];
-          items.forEach(item => {
-            const productName = item.name;
-            const quantity = item.quantity || 1;
-            
-            if (productSales[productName]) {
-              productSales[productName] += quantity;
-            } else {
-              productSales[productName] = quantity;
-            }
-          });
-        });
-        
-        const productsArray = Object.entries(productSales).map(([name, sold]) => ({ name, sold }));
-        productsArray.sort((a, b) => b.sold - a.sold);
-        const top5 = productsArray.slice(0, 5);
-        
-        drawHorizontalBarChart(top5);
-      });
-    }
-    
-    function drawHorizontalBarChart(data) {
-      const canvas = document.getElementById('horizontalBarChart');
-      if (!canvas) return;
-      
-      if (horizontalBarChart) {
-        horizontalBarChart.destroy();
-        horizontalBarChart = null;
-      }
-      
-      if (!data || data.length === 0) return;
-      
-      const labels = data.map(p => p.name);
-      const values = data.map(p => p.sold);
-      
-      horizontalBarChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Số lượng bán',
-            data: values,
-            backgroundColor: '#f1c40f',
-            borderRadius: 6,
-            barPercentage: 0.7,
-            categoryPercentage: 0.8
-          }]
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: { display: false },
-            datalabels: {
-              anchor: 'end',
-              align: 'right',
-              offset: 4,
-              formatter: (value) => value,
-              font: { size: 10, weight: 'bold' },
-              color: '#1a5276'
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `Số lượng: ${context.raw} cái`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              ticks: { 
-                font: { size: 9 },
-                stepSize: 1,
-                callback: function(val) {
-                  return Number.isInteger(val) ? val : '';
-                }
-              },
-              title: { display: true, text: 'Số lượng bán', font: { size: 10 } }
-            },
-            y: {
-              grid: { display: false },
-              ticks: { font: { size: 10 } }
-            }
-          }
-        }
-      });
-    }
-    
-    // ========== 5. REALTIME: THUỐC SẮP HẾT (BẢNG CHI TIẾT) ==========
-    function listenLowStockDetail() {
-      const productsRef = collection(db, 'products');
-      
-      onSnapshot(productsRef, (snapshot) => {
-        const products = [];
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          const stock = data.stock || 0;
-          if (stock < 10) {
-            products.push({
-              name: data.name || 'Sản phẩm',
-              code: data.code || '---',
-              stock: stock
-            });
-          }
-        });
-        
-        products.sort((a, b) => a.stock - b.stock);
-        
-        if (products.length > 0) {
-          document.getElementById('lowStockDetailTable').innerHTML = `
-            <thead>
-              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
-            </thead>
-            <tbody>
-              ${products.map(p => `
-                <tr>
-                  <td>${p.name}</td>
-                  <td>${p.code}</td>
-                  <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
-                  <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          `;
-        } else {
-          document.getElementById('lowStockDetailTable').innerHTML = `
-            <thead>
-              <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
-            </thead>
-            <tbody>
-              <td><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td>
-              </tr>
-            </tbody>
-          `;
-        }
-      });
-    }
-    
-    // ========== 6. DOANH THU 7 NGÀY ==========
-    async function loadRevenue7Days() {
-      const labels = [];
-      const revenues = [];
-      
-      for (let i = 6; i >= 0; i--) {
-        const now = new Date();
-        const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-        vnNow.setDate(vnNow.getDate() - i);
-        
-        const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
-        labels.push(displayDate);
-        
-        const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
-        
-        try {
-          const ordersRef = collection(db, 'orders');
-          const snapshot = await getDocs(ordersRef);
-          
-          let dailyTotal = 0;
-          snapshot.forEach(doc => {
-            const order = doc.data();
-            if (order.status === 'cancelled') return;
-            
-            const orderDate = getDateFromDatetimeVN(order.datetime);
-            if (orderDate === dateStr) {
-              dailyTotal += order.total || 0;
-            }
-          });
-          revenues.push(dailyTotal);
-        } catch (error) {
-          revenues.push(0);
-        }
-      }
-      
-      drawBarChartWithTrend(labels, revenues);
-    }
-    
-    function drawBarChartWithTrend(labels, values) {
-      const canvas = document.getElementById('barChart');
-      if (!canvas) return;
-      
-      if (barChart) barChart.destroy();
-      
-      barChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Doanh thu',
-              type: 'bar',
-              data: values,
-              backgroundColor: '#2a9d6e',
-              borderRadius: 6,
-              barPercentage: 0.6,
-              categoryPercentage: 0.7,
-              datalabels: {
-                anchor: 'end',
-                align: 'top',
-                offset: 4,
-                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 9, weight: 'bold' },
-                color: '#1a6d4c'
-              }
-            },
-            {
-              label: '📈 Xu hướng',
-              type: 'line',
-              data: values,
-              borderColor: '#e74c3c',
-              borderWidth: 2,
-              pointRadius: 3,
-              pointBackgroundColor: '#e74c3c',
-              pointBorderColor: '#fff',
-              pointBorderWidth: 1,
-              fill: false,
-              tension: 0.3,
-              datalabels: { display: false }
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          layout: {
-            padding: { top: 20 }
-          },
-          plugins: {
-            legend: {
-              position: 'top',
-              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `${context.dataset.label}: ${formatMoney(context.raw)}`;
-                }
-              }
-            },
-            datalabels: { display: true }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { display: false },
-              ticks: { 
-                font: { size: 9 },
-                callback: function(value) {
-                  return value.toLocaleString('vi-VN');
-                },
-                maxTicksLimit: 6
-              }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { size: 9 } }
-            }
-          }
-        }
-      });
-    }
-    
-    // ========== 7. SO SÁNH DOANH THU ==========
-    async function loadCompareRevenue() {
-      const now = new Date();
-      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-      const currentMonth = vnNow.getMonth();
-      const currentYear = vnNow.getFullYear();
-      
-      let prevMonth = currentMonth - 1;
-      let prevYear = currentYear;
-      if (prevMonth < 0) {
-        prevMonth = 11;
-        prevYear--;
-      }
-      
-      const weeks = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'];
-      const currentMonthData = [0, 0, 0, 0];
-      const prevMonthData = [0, 0, 0, 0];
-      
-      try {
-        const ordersRef = collection(db, 'orders');
-        const snapshot = await getDocs(ordersRef);
-        
-        snapshot.forEach(doc => {
-          const order = doc.data();
-          if (order.status === 'cancelled') return;
-          
-          const orderDate = getDateFromDatetimeVN(order.datetime);
-          const [year, month, day] = orderDate.split('-').map(Number);
-          
-          const weekIndex = Math.min(Math.floor((day - 1) / 7), 3);
-          
-          if (year === currentYear && month === currentMonth + 1) {
-            currentMonthData[weekIndex] += order.total || 0;
-          } else if (year === prevYear && month === prevMonth + 1) {
-            prevMonthData[weekIndex] += order.total || 0;
-          }
-        });
-      } catch (error) {
-        console.error('Lỗi lấy dữ liệu so sánh:', error);
-      }
-      
-      drawCompareChart(weeks, currentMonthData, prevMonthData);
-    }
-    
-    function drawCompareChart(labels, currentData, prevData) {
-      const canvas = document.getElementById('compareChart');
-      if (!canvas) return;
-      
-      if (compareChart) compareChart.destroy();
-      
-      compareChart = new Chart(canvas, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [
-            {
-              label: 'Tháng này',
-              data: currentData,
-              borderColor: '#3498db',
-              backgroundColor: 'rgba(52, 152, 219, 0.1)',
-              borderWidth: 2,
-              pointRadius: 4,
-              pointBackgroundColor: '#3498db',
-              pointBorderColor: '#fff',
-              tension: 0.3,
-              fill: true,
-              datalabels: {
-                anchor: 'end',
-                align: 'top',
-                offset: 4,
-                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 8 },
-                color: '#3498db'
-              }
-            },
-            {
-              label: 'Tháng trước',
-              data: prevData,
-              borderColor: '#e67e22',
-              backgroundColor: 'rgba(230, 126, 34, 0.1)',
-              borderWidth: 2,
-              pointRadius: 4,
-              pointBackgroundColor: '#e67e22',
-              pointBorderColor: '#fff',
-              tension: 0.3,
-              fill: true,
-              datalabels: {
-                anchor: 'end',
-                align: 'top',
-                offset: 4,
-                formatter: (value) => value > 0 ? formatMoneyShort(value) : '',
-                font: { size: 8 },
-                color: '#e67e22'
-              }
-            }
-          ]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: {
-              position: 'top',
-              labels: { font: { size: 9 }, usePointStyle: true, boxWidth: 6 }
-            },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `${context.dataset.label}: ${formatMoney(context.raw)}`;
-                }
-              }
-            }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { display: false },
-              ticks: { 
-                font: { size: 9 },
-                callback: function(value) {
-                  return value.toLocaleString('vi-VN');
-                },
-                maxTicksLimit: 6
-              }
-            },
-            x: {
-              grid: { display: false },
-              ticks: { font: { size: 9 } }
-            }
-          }
-        }
-      });
-    }
-    
-    // ========== 8. SỐ ĐƠN HÀNG THEO NGÀY (BIỂU ĐỒ THANH NGANG - 5 NGÀY) ==========
-    async function loadDailyOrdersChart() {
-      const labels = [];
-      const orders = [];
-      
-      // 5 ngày gần nhất
-      for (let i = 4; i >= 0; i--) {
-        const now = new Date();
-        const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
-        vnNow.setDate(vnNow.getDate() - i);
-        
-        const displayDate = `${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
-        labels.push(displayDate);
-        
-        const dateStr = `${vnNow.getFullYear()}-${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`;
-        
-        try {
-          const ordersRef = collection(db, 'orders');
-          const snapshot = await getDocs(ordersRef);
-          
-          let dailyOrders = 0;
-          snapshot.forEach(doc => {
-            const order = doc.data();
-            if (order.status === 'cancelled') return;
-            
-            const orderDate = getDateFromDatetimeVN(order.datetime);
-            if (orderDate === dateStr) {
-              dailyOrders++;
-            }
-          });
-          orders.push(dailyOrders);
-        } catch (error) {
-          orders.push(0);
-        }
-      }
-      
-      drawDailyOrdersBarChart(labels, orders);
-    }
-    
-    function drawDailyOrdersBarChart(labels, values) {
-      const canvas = document.getElementById('dailyOrdersChart');
-      if (!canvas) return;
-      
-      if (dailyOrdersChart) {
-        dailyOrdersChart.destroy();
-        dailyOrdersChart = null;
-      }
-      
-      dailyOrdersChart = new Chart(canvas, {
-        type: 'bar',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Số đơn hàng',
-            data: values,
-            backgroundColor: '#3498db',
-            borderRadius: 6,
-            barPercentage: 0.7,
-            categoryPercentage: 0.8,
-            datalabels: {
-              anchor: 'end',
-              align: 'top',
-              offset: 4,
-              formatter: (value) => value > 0 ? value : '',
-              font: { size: 9, weight: 'bold' },
-              color: '#3498db'
-            }
-          }]
-        },
-        options: {
-          indexAxis: 'y',
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              callbacks: {
-                label: function(context) {
-                  return `Số đơn: ${context.raw} đơn`;
-                }
-              }
-            }
-          },
-          scales: {
-            x: {
-              grid: { display: false },
-              ticks: { 
-                font: { size: 9 },
-                stepSize: 1,
-                callback: function(val) {
-                  return Number.isInteger(val) ? val : '';
-                }
-              },
-              title: { display: true, text: 'Số đơn hàng', font: { size: 10 } }
-            },
-            y: {
-              grid: { display: false },
-              ticks: { font: { size: 10 } }
-            }
-          }
-        }
-      });
-    }
-    
-    function updateTimestamp() {
-      const now = new Date();
-      document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${now.toLocaleString('vi-VN')}`;
-    }
-    
-    // ========== KHỞI ĐỘNG ==========
-    console.log('🚀 Khởi động Dashboard');
-    
-    initDarkMode();
-    document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
-    
-    listenTodayStats();
-    listenLowStockCount();
-    listenTopStaff();
-    listenTopProductsHorizontal();
-    listenLowStockDetail();
-    loadRevenue7Days();
-    loadCompareRevenue();
-    loadDailyOrdersChart();
-    
-    updateTimestamp();
-    setInterval(updateTimestamp, 1000);
-    
-    const ordersRef = collection(db, 'orders');
-    onSnapshot(ordersRef, () => {
-      loadRevenue7Days();
-      loadCompareRevenue();
-      loadDailyOrdersChart();
-    });
-  </script>
-
+  <!-- Firebase SDK (phiên bản cũ ổn định) -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+  
   <style>
     * {
       margin: 0;
@@ -772,7 +19,6 @@
       box-sizing: border-box;
     }
 
-    /* Light mode (mặc định) */
     :root {
       --bg-color: #f0f7f3;
       --card-bg: white;
@@ -782,7 +28,6 @@
       --shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
 
-    /* Dark mode */
     body.dark-mode {
       --bg-color: #1a1a2e;
       --card-bg: #16213e;
@@ -834,7 +79,6 @@
       border-radius: 10px;
     }
 
-    /* Header với nút Dark mode */
     .header {
       display: flex;
       align-items: center;
@@ -880,7 +124,6 @@
       100% { opacity: 0.6; }
     }
 
-    /* Hàng trên cùng 3 ô */
     .top-row-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1018,7 +261,6 @@
       min-height: 0;
     }
 
-    /* Hàng dưới cùng 2 ô */
     .bottom-row-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1163,7 +405,6 @@
     <button class="dark-mode-btn" id="darkModeToggle">☀️</button>
   </div>
 
-  <!-- Hàng 1: 3 ô -->
   <div class="top-row-3">
     <div class="stat-card">
       <h3>💰 DOANH THU HÔM NAY</h3>
@@ -1182,7 +423,6 @@
     </div>
   </div>
 
-  <!-- Hàng 2: Doanh thu 7 ngày + So sánh doanh thu -->
   <div class="row-2-charts">
     <div class="chart-card">
       <h3>📊 Doanh thu 7 ngày</h3>
@@ -1198,7 +438,6 @@
     </div>
   </div>
 
-  <!-- Hàng 3: Số đơn theo ngày + Top 5 sản phẩm -->
   <div class="row-3-charts">
     <div class="left-card">
       <h3>📊 Số đơn hàng theo ngày</h3>
@@ -1214,7 +453,6 @@
     </div>
   </div>
 
-  <!-- Hàng 4: Top nhân viên + Bảng thuốc sắp hết -->
   <div class="bottom-row-2">
     <div class="staff-card">
       <h3>👩‍⚕️ Top nhân viên bán tốt</h3>
@@ -1239,5 +477,400 @@
 
   <div class="update-time" id="updateTime"></div>
 </div>
+
+<script>
+  // Đăng ký plugin datalabels
+  Chart.register(ChartDataLabels);
+
+  // Firebase config
+  const firebaseConfig = {
+    apiKey: "AIzaSyC-eIR4U5WWkh9B8EKVetLTynI-LykqaAU",
+    authDomain: "ntkhang-pharmacy.firebaseapp.com",
+    projectId: "ntkhang-pharmacy",
+    storageBucket: "ntkhang-pharmacy.firebasestorage.app",
+    messagingSenderId: "366824735651",
+    appId: "1:366824735651:web:1eda84d39f3005a0b4d016"
+  };
+  
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // Helper functions
+  function formatMoney(amount) {
+    if (!amount && amount !== 0) return '0 ₫';
+    return Math.round(amount).toLocaleString('vi-VN') + ' ₫';
+  }
+
+  function formatMoneyShort(amount) {
+    if (!amount && amount !== 0) return '0₫';
+    if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'tr';
+    if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k';
+    return Math.round(amount).toLocaleString('vi-VN') + '₫';
+  }
+
+  function calculateGrowth(current, previous) {
+    if (!previous || previous === 0) {
+      if (current > 0) return 100;
+      return 0;
+    }
+    return ((current - previous) / previous * 100).toFixed(1);
+  }
+
+  function getDateFromDatetimeVN(datetimeStr) {
+    if (!datetimeStr) return null;
+    const utcDate = new Date(datetimeStr);
+    const vnDate = new Date(utcDate.getTime() + (7 * 60 * 60 * 1000));
+    return vnDate.toISOString().split('T')[0];
+  }
+
+  function getTodayVN() {
+    const now = new Date();
+    const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    return vnDate.toISOString().split('T')[0];
+  }
+
+  function getYesterdayVN() {
+    const now = new Date();
+    const vnDate = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    vnDate.setDate(vnDate.getDate() - 1);
+    return vnDate.toISOString().split('T')[0];
+  }
+
+  // Dark mode
+  function initDarkMode() {
+    const savedMode = localStorage.getItem('darkMode');
+    if (savedMode === 'enabled') {
+      document.body.classList.add('dark-mode');
+      document.getElementById('darkModeToggle').innerHTML = '🌙';
+    } else {
+      document.getElementById('darkModeToggle').innerHTML = '☀️';
+    }
+  }
+  
+  function toggleDarkMode() {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    localStorage.setItem('darkMode', isDark ? 'enabled' : 'disabled');
+    document.getElementById('darkModeToggle').innerHTML = isDark ? '🌙' : '☀️';
+  }
+
+  // Charts
+  let barChart = null, compareChart = null, dailyOrdersChart = null, horizontalBarChart = null;
+
+  // Today stats
+  db.collection('orders').onSnapshot((snapshot) => {
+    const today = getTodayVN();
+    const yesterday = getYesterdayVN();
+    let todayRevenue = 0, todayOrders = 0, yesterdayRevenue = 0, yesterdayOrders = 0;
+    
+    snapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      const orderDate = getDateFromDatetimeVN(order.datetime);
+      const total = order.total || 0;
+      if (orderDate === today) {
+        todayRevenue += total;
+        todayOrders++;
+      } else if (orderDate === yesterday) {
+        yesterdayRevenue += total;
+        yesterdayOrders++;
+      }
+    });
+    
+    document.getElementById('todayRevenue').innerHTML = formatMoney(todayRevenue);
+    const revGrowth = calculateGrowth(todayRevenue, yesterdayRevenue);
+    const revEl = document.getElementById('revenueGrowth');
+    revEl.innerHTML = `${revGrowth >= 0 ? '▲' : '▼'} ${Math.abs(revGrowth)}% vs hôm qua`;
+    revEl.style.color = revGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+
+    document.getElementById('todayOrders').innerHTML = todayOrders.toLocaleString('vi-VN') + ' đơn';
+    const ordGrowth = calculateGrowth(todayOrders, yesterdayOrders);
+    const ordEl = document.getElementById('orderGrowth');
+    ordEl.innerHTML = `${ordGrowth >= 0 ? '▲' : '▼'} ${Math.abs(ordGrowth)}%`;
+    ordEl.style.color = ordGrowth >= 0 ? '#2a9d6e' : '#e74c3c';
+  });
+
+  // Low stock count
+  db.collection('products').onSnapshot((snapshot) => {
+    let lowStockCount = 0;
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const stock = data.stock || 0;
+      if (stock < 10) lowStockCount++;
+    });
+    document.getElementById('lowStockCount').innerHTML = lowStockCount + ' sản phẩm';
+    const warningEl = document.getElementById('lowStockWarning');
+    if (lowStockCount > 0) {
+      warningEl.innerHTML = '⚠️ Cần nhập hàng!';
+      warningEl.style.color = '#e74c3c';
+    } else {
+      warningEl.innerHTML = '✅ Đủ hàng';
+      warningEl.style.color = '#2a9d6e';
+    }
+  });
+
+  // Low stock detail
+  db.collection('products').onSnapshot((snapshot) => {
+    const products = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      const stock = data.stock || 0;
+      if (stock < 10) {
+        products.push({ name: data.name || 'Sản phẩm', code: data.code || '---', stock });
+      }
+    });
+    products.sort((a, b) => a.stock - b.stock);
+    
+    if (products.length > 0) {
+      document.getElementById('lowStockDetailTable').innerHTML = `
+        <thead>
+          <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+        </thead>
+        <tbody>
+          ${products.map(p => `
+            <tr>
+              <td>${p.name}</td>
+              <td>${p.code}</td>
+              <td class="${p.stock < 5 ? 'stock-low' : 'stock-warning'}">${p.stock}</td>
+              <td>${p.stock < 5 ? '⚠️ Cần nhập ngay' : '⚡ Sắp hết'}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      `;
+    } else {
+      document.getElementById('lowStockDetailTable').innerHTML = `
+        <thead>
+          <tr><th>Tên thuốc</th><th>Mã</th><th>Tồn kho</th><th>Trạng thái</th></tr>
+        </thead>
+        <tbody>
+          <tr><td colspan="4" style="text-align:center">🎉 Tất cả hàng đều đủ! 🎉</td></tr>
+        </tbody>
+      `;
+    }
+  });
+
+  // Top staff
+  db.collection('orders').onSnapshot((snapshot) => {
+    const staffSales = {};
+    snapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      let employee = order.employee || 'Nhân viên';
+      if (employee === 'undefined' || employee === 'Unknown' || employee === '') employee = 'Nhân viên';
+      const total = order.total || 0;
+      staffSales[employee] = (staffSales[employee] || 0) + total;
+    });
+    const staffArray = Object.entries(staffSales).map(([name, total]) => ({ name, total }));
+    staffArray.sort((a, b) => b.total - a.total);
+    const topStaff = staffArray.slice(0, 5);
+    
+    if (topStaff.length > 0) {
+      document.getElementById('topStaffList').innerHTML = topStaff.map((staff, idx) => `
+        <li>
+          <span class="staff-name">${idx + 1}. ${staff.name}</span>
+          <span class="staff-amount">${formatMoney(staff.total)}</span>
+        </li>
+      `).join('');
+    } else {
+      document.getElementById('topStaffList').innerHTML = '<li>📭 Chưa có dữ liệu</li>';
+    }
+  });
+
+  // Top products horizontal bar
+  function drawHorizontalBarChart(data) {
+    const canvas = document.getElementById('horizontalBarChart');
+    if (!canvas) return;
+    if (horizontalBarChart) horizontalBarChart.destroy();
+    if (!data || data.length === 0) return;
+    
+    const labels = data.map(p => p.name);
+    const values = data.map(p => p.sold);
+    
+    horizontalBarChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Số lượng bán',
+          data: values,
+          backgroundColor: '#f1c40f',
+          borderRadius: 6,
+          barPercentage: 0.7
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            anchor: 'end',
+            align: 'right',
+            offset: 4,
+            formatter: (value) => value,
+            font: { size: 10, weight: 'bold' },
+            color: '#1a5276'
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { stepSize: 1 } },
+          y: { grid: { display: false } }
+        }
+      }
+    });
+  }
+
+  db.collection('orders').onSnapshot((snapshot) => {
+    const productSales = {};
+    snapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      (order.items || []).forEach(item => {
+        const productName = item.name;
+        const quantity = item.quantity || 1;
+        productSales[productName] = (productSales[productName] || 0) + quantity;
+      });
+    });
+    const productsArray = Object.entries(productSales).map(([name, sold]) => ({ name, sold }));
+    productsArray.sort((a, b) => b.sold - a.sold);
+    const top5 = productsArray.slice(0, 5);
+    drawHorizontalBarChart(top5);
+  });
+
+  // Revenue 7 days
+  async function loadRevenue7Days() {
+    const labels = [], revenues = [];
+    for (let i = 6; i >= 0; i--) {
+      const now = new Date();
+      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      vnNow.setDate(vnNow.getDate() - i);
+      labels.push(`${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`);
+      const dateStr = vnNow.toISOString().split('T')[0];
+      const snapshot = await db.collection('orders').get();
+      let daily = 0;
+      snapshot.forEach(doc => {
+        const order = doc.data();
+        if (order.status === 'cancelled') return;
+        if (getDateFromDatetimeVN(order.datetime) === dateStr) daily += order.total || 0;
+      });
+      revenues.push(daily);
+    }
+    
+    const ctx = document.getElementById('barChart').getContext('2d');
+    if (barChart) barChart.destroy();
+    barChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Doanh thu', type: 'bar', data: revenues, backgroundColor: '#2a9d6e', borderRadius: 6, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 9, weight: 'bold' }, color: '#1a6d4c' } },
+          { label: '📈 Xu hướng', type: 'line', data: revenues, borderColor: '#e74c3c', borderWidth: 2, pointRadius: 3, fill: false, tension: 0.3, datalabels: { display: false } }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        layout: { padding: { top: 20 } },
+        plugins: { legend: { position: 'top', labels: { font: { size: 9 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatMoney(ctx.raw)}` } }, datalabels: { display: true } },
+        scales: { y: { beginAtZero: true, grid: { display: false }, ticks: { callback: v => v.toLocaleString('vi-VN'), maxTicksLimit: 6 } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+
+  // Compare revenue
+  async function loadCompareRevenue() {
+    const now = new Date();
+    const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+    const currentMonth = vnNow.getMonth();
+    const currentYear = vnNow.getFullYear();
+    let prevMonth = currentMonth - 1;
+    let prevYear = currentYear;
+    if (prevMonth < 0) { prevMonth = 11; prevYear--; }
+    
+    const weeks = ['Tuần 1', 'Tuần 2', 'Tuần 3', 'Tuần 4'];
+    const currentMonthData = [0, 0, 0, 0];
+    const prevMonthData = [0, 0, 0, 0];
+    
+    const snapshot = await db.collection('orders').get();
+    snapshot.forEach(doc => {
+      const order = doc.data();
+      if (order.status === 'cancelled') return;
+      const orderDate = getDateFromDatetimeVN(order.datetime);
+      const [year, month, day] = orderDate.split('-').map(Number);
+      const weekIndex = Math.min(Math.floor((day - 1) / 7), 3);
+      if (year === currentYear && month === currentMonth + 1) currentMonthData[weekIndex] += order.total || 0;
+      else if (year === prevYear && month === prevMonth + 1) prevMonthData[weekIndex] += order.total || 0;
+    });
+    
+    const ctx = document.getElementById('compareChart').getContext('2d');
+    if (compareChart) compareChart.destroy();
+    compareChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: weeks,
+        datasets: [
+          { label: 'Tháng này', data: currentMonthData, borderColor: '#3498db', backgroundColor: 'rgba(52,152,219,0.1)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 8 }, color: '#3498db' } },
+          { label: 'Tháng trước', data: prevMonthData, borderColor: '#e67e22', backgroundColor: 'rgba(230,126,34,0.1)', borderWidth: 2, pointRadius: 4, fill: true, tension: 0.3, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v > 0 ? formatMoneyShort(v) : '', font: { size: 8 }, color: '#e67e22' } }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: { legend: { position: 'top', labels: { font: { size: 9 } } }, tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${formatMoney(ctx.raw)}` } } },
+        scales: { y: { beginAtZero: true, grid: { display: false }, ticks: { callback: v => v.toLocaleString('vi-VN'), maxTicksLimit: 6 } }, x: { grid: { display: false } } }
+      }
+    });
+  }
+
+  // Daily orders chart
+  async function loadDailyOrdersChart() {
+    const labels = [], orders = [];
+    for (let i = 4; i >= 0; i--) {
+      const now = new Date();
+      const vnNow = new Date(now.getTime() + (7 * 60 * 60 * 1000));
+      vnNow.setDate(vnNow.getDate() - i);
+      labels.push(`${(vnNow.getMonth()+1).toString().padStart(2,'0')}-${vnNow.getDate().toString().padStart(2,'0')}`);
+      const dateStr = vnNow.toISOString().split('T')[0];
+      const snapshot = await db.collection('orders').get();
+      let count = 0;
+      snapshot.forEach(doc => {
+        const order = doc.data();
+        if (order.status === 'cancelled') return;
+        if (getDateFromDatetimeVN(order.datetime) === dateStr) count++;
+      });
+      orders.push(count);
+    }
+    
+    const ctx = document.getElementById('dailyOrdersChart').getContext('2d');
+    if (dailyOrdersChart) dailyOrdersChart.destroy();
+    dailyOrdersChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ label: 'Số đơn hàng', data: orders, backgroundColor: '#3498db', borderRadius: 6, datalabels: { anchor: 'end', align: 'top', offset: 4, formatter: (v) => v, font: { size: 9, weight: 'bold' }, color: '#3498db' } }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => `Số đơn: ${ctx.raw} đơn` } } }, scales: { x: { grid: { display: false }, ticks: { stepSize: 1 } }, y: { grid: { display: false } } } }
+    });
+  }
+
+  function updateTimestamp() {
+    document.getElementById('updateTime').innerHTML = `🔄 Cập nhật lần cuối: ${new Date().toLocaleString('vi-VN')}`;
+  }
+
+  // Initialize
+  initDarkMode();
+  document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+  
+  loadRevenue7Days();
+  loadCompareRevenue();
+  loadDailyOrdersChart();
+  updateTimestamp();
+  setInterval(updateTimestamp, 1000);
+
+  db.collection('orders').onSnapshot(() => {
+    loadRevenue7Days();
+    loadCompareRevenue();
+    loadDailyOrdersChart();
+  });
+</script>
 </body>
 </html>
