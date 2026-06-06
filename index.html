@@ -237,6 +237,10 @@
         if (order.status === 'cancelled') return showToast('Đơn này đã huỷ rồi!');
         if (!window.confirm('Huỷ đơn hàng ' + order.id + '?\nTồn kho sẽ được khôi phục.')) return;
         setSyncing(true);
+        gtag('event', 'huy_don_hang', {
+    'order_id': order.id,
+    'value': order.total
+  });
         try {
           const batch = db.batch();
           // Mark order as cancelled
@@ -253,6 +257,11 @@
             });
           });
           await batch.commit();
+          gtag('event', 'huy_don_hang', {
+  'order_id': order.id,
+  'value': order.total
+});
+showToast('✅ Đã huỷ đơn & khôi phục tồn kho!');
           showToast('✅ Đã huỷ đơn & khôi phục tồn kho!');
         } catch(e) { showToast('❌ Lỗi: ' + e.message); }
         setSyncing(false);
