@@ -370,6 +370,23 @@ showToast('✅ Đã huỷ đơn & khôi phục tồn kho!');
             if (p) batch.update(db.collection('products').doc(item.code), { stock: Math.max(0, p.stock - item.quantity) });
           });
           await batch.commit();
+          gtag('event', 'purchase', {
+      transaction_id: order.id,
+      value: total,
+      currency: 'VND',
+      items: cart.map(item => ({
+        item_id: item.code || item.id,
+        item_name: item.name,
+        price: item.price,
+        quantity: item.quantity
+      }))
+    });
+
+    setLastOrder(order);
+    setShowReceipt(true);
+    setCart([]);
+    setEmployeeName('');
+    showToast('✅ Đơn hàng hoàn tất!');
           setLastOrder(order);
           setShowReceipt(true);
           setCart([]);
